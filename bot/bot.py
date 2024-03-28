@@ -169,12 +169,12 @@ async def help_group_chat_handle(update: Update, context: CallbackContext):
         #context.user_data['process_allowed'] = False
         #await update.message.reply_text("Insufficient tokens. Please top up to continue.")
 
-#untested     
+#untested1   
 async def token_balance_preprocessor(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     current_balance = db.check_token_balance(user_id)
 
-    if db.check_token_balance(user_id) < 1:  # Assuming 1 token is needed
+    if db.check_token_balance(user_id) < 1:  # Number of minimum tokens needed
         context.user_data['process_allowed'] = False
         await update.message.reply_text(
             f"_Insufficient tokens. Please top up to continue._ \n\n Your current balance is {current_balance}",
