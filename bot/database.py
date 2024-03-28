@@ -50,7 +50,8 @@ class Database:
             "n_used_tokens": {},
 
             "n_generated_images": 0,
-            "n_transcribed_seconds": 0.0  # voice message transcription
+            "n_transcribed_seconds": 0.0,  # voice message transcription
+            "token_balance": 100  # Initialize token balance for new users
         }
 
         if not self.check_if_user_exists(user_id):
@@ -126,3 +127,18 @@ class Database:
             {"_id": dialog_id, "user_id": user_id},
             {"$set": {"messages": dialog_messages}}
         )
+    #untested
+    def check_token_balance(self, user_id: int) -> int:
+        """Check the user's current token balance."""
+        user = self.user_collection.find_one({"_id": user_id})
+        return user.get("token_balance", 0)
+
+    def deduct_tokens(self, user_id: int, tokens_used: int):
+        """Deduct a certain number of tokens from the user's balance."""
+        self.user_collection.update_one(
+            {"_id": user_id},
+            {"$inc": {"token_balance": -tokens_used}}
+        )
+
+
+

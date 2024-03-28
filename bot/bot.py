@@ -159,13 +159,43 @@ async def help_group_chat_handle(update: Update, context: CallbackContext):
      await update.message.reply_text(text, parse_mode=ParseMode.HTML)
      await update.message.reply_video(config.help_group_chat_video_path)
 
+#untested
+#async def token_balance_preprocessor(update: Update, context: CallbackContext):
+    #user_id = update.effective_user.id
+
+    #if db.check_token_balance(user_id) >= 11:  # Assuming 1 token is needed
+        #context.user_data['process_allowed'] = True
+    #else:
+        #context.user_data['process_allowed'] = False
+        #await update.message.reply_text("Insufficient tokens. Please top up to continue.")
+
+#untested     
+async def token_balance_preprocessor(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    current_balance = db.check_token_balance(user_id)
+
+    if db.check_token_balance(user_id) < 1:  # Assuming 1 token is needed
+        context.user_data['process_allowed'] = False
+        await update.message.reply_text(
+            f"_Insufficient tokens. Please top up to continue._ \n\n Your current balance is {current_balance}",
+            parse_mode='Markdown'
+        )
+        return False
+    else:
+        context.user_data['process_allowed'] = True
+        return True
+
 
 async def retry_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
     if await is_previous_message_not_answered_yet(update, context): return
-
+    
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
+
+    #untested1
+    if not await token_balance_preprocessor(update, context):
+        return
 
     dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
     if len(dialog_messages) == 0:
@@ -200,11 +230,16 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
     user_id = update.message.from_user.id
     chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
 
+    #untested1
+    if not await token_balance_preprocessor(update, context):
+        return
+    
     if chat_mode == "artist":
         await generate_image_handle(update, context, message=message)
         return
 
     async def message_handle_fn():
+        
         # new dialog timeout
         if use_new_dialog_timeout:
             if (datetime.now() - db.get_user_attribute(user_id, "last_interaction")).seconds > config.new_dialog_timeout and len(db.get_dialog_messages(user_id)) > 0:
@@ -337,6 +372,10 @@ async def voice_message_handle(update: Update, context: CallbackContext):
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
+
+    #untested1
+    if not await token_balance_preprocessor(update, context):
+        return
 
     voice = update.message.voice
     voice_file = await context.bot.get_file(voice.file_id)
@@ -606,6 +645,10 @@ async def show_balance_handle(update: Update, context: CallbackContext):
 
 
 async def edited_message_handle(update: Update, context: CallbackContext):
+
+    #untested
+
+
     if update.edited_message.chat.type == "private":
         text = "🥲 Unfortunately, message <b>editing</b> is not supported"
         await update.edited_message.reply_text(text, parse_mode=ParseMode.HTML)

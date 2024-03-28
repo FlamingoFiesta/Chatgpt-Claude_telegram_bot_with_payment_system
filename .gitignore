@@ -135,6 +135,7 @@ dmypy.json
 # Custom
 config/config.yml
 config/config.env
+.DS_Store
 
 docker-compose.dev.yml
 
