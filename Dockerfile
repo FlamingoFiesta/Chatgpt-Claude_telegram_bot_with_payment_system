@@ -19,5 +19,8 @@ RUN pip3 install -r /tmp/requirements.txt && rm -r /tmp/requirements.txt
 COPY . /code
 WORKDIR /code
 
+ENV FLASK_APP=flask.py
+CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
+
 CMD ["bash"]
 

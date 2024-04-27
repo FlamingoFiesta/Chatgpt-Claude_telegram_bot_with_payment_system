@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 import openai
 
+import stripe
 import telegram
 from telegram import (
     Update,
@@ -31,7 +32,9 @@ import config
 import database
 import openai_utils
 
+import base64
 
+#remeber ddns for later to replace ngrok
 # setup
 db = database.Database()
 logger = logging.getLogger(__name__)
@@ -39,13 +42,18 @@ logger = logging.getLogger(__name__)
 user_semaphores = {}
 user_tasks = {}
 
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s') #logging error
 HELP_MESSAGE = """Commands:
+
 ⚪ /retry – Regenerate last bot answer
 ⚪ /new – Start new dialog
 ⚪ /mode – Select chat mode
 ⚪ /settings – Show settings
 ⚪ /balance – Show balance
+⚪ /topup – Add credits to your account
 ⚪ /help – Show help
+⚪ /persona – Show your persona
 
 🎨 Generate images from text prompts in <b>👩‍🎨 Artist</b> /mode
 👥 Add bot to <b>group chat</b>: /help_group_chat
@@ -62,6 +70,15 @@ Instructions (see <b>video</b> below):
 To get a reply from the bot in the chat – @ <b>tag</b> it or <b>reply</b> to its message.
 For example: "{bot_username} write a poem about Telegram"
 """
+
+def update_user_personas_from_config(db, personas):
+    for persona, user_ids in personas.items():
+        for user_id in user_ids:
+            db.user_collection.update_one(
+                {"_id": user_id},
+                {"$set": {"persona": persona}}
+            )
+    print("User personas updated from config.")
 
 
 def split_text_into_chunks(text, chunk_size):
@@ -135,7 +152,8 @@ async def start_handle(update: Update, context: CallbackContext):
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
     db.start_new_dialog(user_id)
 
-    reply_text = "Hi! I'm <b>ChatGPT</b> bot implemented with OpenAI API 🤖\n\n"
+    reply_text = "Heyo! I'm <b>Chatdud</b> , Nice to meet ya! \n\n I'm a telegram bot that helps you use ChatGPT 🤖\n\n"
+    reply_text += "I'm currently in development, for any issues or feedback, feel free to contact my developer @pas_stilat_de_pastilate \n\n"
     reply_text += HELP_MESSAGE
 
     await update.message.reply_text(reply_text, parse_mode=ParseMode.HTML)
@@ -159,31 +177,43 @@ async def help_group_chat_handle(update: Update, context: CallbackContext):
      await update.message.reply_text(text, parse_mode=ParseMode.HTML)
      await update.message.reply_video(config.help_group_chat_video_path)
 
-#untested
-#async def token_balance_preprocessor(update: Update, context: CallbackContext):
-    #user_id = update.effective_user.id
 
-    #if db.check_token_balance(user_id) >= 11:  # Assuming 1 token is needed
-        #context.user_data['process_allowed'] = True
-    #else:
-        #context.user_data['process_allowed'] = False
-        #await update.message.reply_text("Insufficient tokens. Please top up to continue.")
-
-#untested1   
+#from config import personas
 async def token_balance_preprocessor(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     current_balance = db.check_token_balance(user_id)
+    user_persona = db.get_user_persona(user_id)
+
+    if user_persona == "admin":
+        return True
 
     if db.check_token_balance(user_id) < 1:  # Number of minimum tokens needed
         context.user_data['process_allowed'] = False
         await update.message.reply_text(
-            f"_Insufficient tokens. Please top up to continue._ \n\n Your current balance is {current_balance}",
+            f"_Oops, your balance is too low :( Please top up to continue._ \n\n Your current balance is {current_balance}",
             parse_mode='Markdown'
         )
         return False
     else:
         context.user_data['process_allowed'] = True
         return True
+
+async def euro_balance_preprocessor(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    current_euro_balance = db.get_user_euro_balance(user_id)  # This function needs to be implemented
+    minimum_euro_required = 0.01  # Set the minimum required balance in euros. This value should be dynamic based on the operation.
+
+    if current_euro_balance < minimum_euro_required:  
+        context.user_data['process_allowed'] = False
+        await update.message.reply_text(
+            f"Oops, your balance is too low :( Please top up to continue. Your current euro balance is €{current_euro_balance:.2f}",
+            parse_mode='Markdown'
+        )
+        return False
+    else:
+        context.user_data['process_allowed'] = True
+        return True
+
 
 
 async def retry_handle(update: Update, context: CallbackContext):
@@ -193,8 +223,10 @@ async def retry_handle(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
-    #untested1
-    if not await token_balance_preprocessor(update, context):
+    
+    #if not await token_balance_preprocessor(update, context):
+        #return
+    if not await euro_balance_preprocessor(update, context):
         return
 
     dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
@@ -202,10 +234,783 @@ async def retry_handle(update: Update, context: CallbackContext):
         await update.message.reply_text("No message to retry 🤷‍♂️")
         return
 
+    #deduction test
+    #db.deduct_tokens(user_id, 1)
+
     last_dialog_message = dialog_messages.pop()
     db.set_dialog_messages(user_id, dialog_messages, dialog_id=None)  # last message was removed from the context
 
+#    try:
+#        chatgpt_instance = openai_utils.ChatGPT(model=db.get_user_attribute(user_id, "current_model"))
+#        answer, (n_input_tokens, n_output_tokens), _ = await chatgpt_instance.send_message(
+#            message=last_dialog_message["user"],
+#            dialog_messages=dialog_messages[:-1],  # Exclude the last message for retry
+#            chat_mode=db.get_user_attribute(user_id, "current_chat_mode")
+#        )
+#        # Deduct tokens based on the tokens used for the query and response
+#        #db.deduct_tokens_based_on_persona(user_id, n_input_tokens, n_output_tokens)
+#
+#        action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
+#        db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens})  
+#       
+#        # Now handle the response as needed, e.g., sending it back to the user
+#        #await update.message.reply_text(answer)
+#    except Exception as e:
+#        await update.message.reply_text(f"Error retrying message: {str(e)}")
+
+#    action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
+#    db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens})
+# APPARENTLY THIS BREAKS THE FUNCTION
     await message_handle(update, context, message=last_dialog_message["user"], use_new_dialog_timeout=False)
+
+#WTF IS THIS
+import json
+from json import JSONEncoder
+
+class CustomEncoder(JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            # Format date in ISO 8601 format, or any format you prefer
+            return obj.isoformat()
+        # Let the base class default method raise the TypeError
+        return JSONEncoder.default(self, obj)
+
+async def _vision_message_handle_fn(
+    update: Update, context: CallbackContext, use_new_dialog_timeout: bool = True
+):
+    logger.info('_vision_message_handle_fn')
+    user_id = update.message.from_user.id
+    current_model = db.get_user_attribute(user_id, "current_model")
+
+    if current_model != "gpt-4-vision-preview":
+        await update.message.reply_text(
+            "🥲 Images processing is only available for <b>gpt-4-vision-preview</b> model. Please change your settings in /settings",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
+
+    # new dialog timeout
+    if use_new_dialog_timeout:
+        if (datetime.now() - db.get_user_attribute(user_id, "last_interaction")).seconds > config.new_dialog_timeout and len(db.get_dialog_messages(user_id)) > 0:
+            db.start_new_dialog(user_id)
+            await update.message.reply_text(f"Starting new dialog due to timeout (<b>{config.chat_modes[chat_mode]['name']}</b> mode) ✅", parse_mode=ParseMode.HTML)
+    db.set_user_attribute(user_id, "last_interaction", datetime.now())
+
+    buf = None
+    if update.message.effective_attachment:
+        photo = update.message.effective_attachment[-1]
+        photo_file = await context.bot.get_file(photo.file_id)
+
+        # store file in memory, not on disk
+        buf = io.BytesIO()
+        await photo_file.download_to_memory(buf)
+        buf.name = "image.jpg"  # file extension is required
+        buf.seek(0)  # move cursor to the beginning of the buffer
+
+    # in case of CancelledError
+    n_input_tokens, n_output_tokens = 0, 0
+
+    try:
+        # send placeholder message to user
+        placeholder_message = await update.message.reply_text("<i>Making shit up...</i>", parse_mode=ParseMode.HTML)
+        message = update.message.caption or update.message.text or ''
+
+        # send typing action
+        await update.message.chat.send_action(action="typing")
+
+        dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
+        parse_mode = {"html": ParseMode.HTML, "markdown": ParseMode.MARKDOWN}[
+            config.chat_modes[chat_mode]["parse_mode"]
+        ]
+
+        chatgpt_instance = openai_utils.ChatGPT(model=current_model)
+        if config.enable_message_streaming:
+            gen = chatgpt_instance.send_vision_message_stream(
+                message,
+                dialog_messages=dialog_messages,
+                image_buffer=buf,
+                chat_mode=chat_mode,
+            )
+        else:
+            (
+                answer,
+                (n_input_tokens, n_output_tokens),
+                n_first_dialog_messages_removed,
+            ) = await chatgpt_instance.send_vision_message(
+                message,
+                dialog_messages=dialog_messages,
+                image_buffer=buf,
+                chat_mode=chat_mode,
+            )
+
+            async def fake_gen():
+                yield "finished", answer, (
+                    n_input_tokens,
+                    n_output_tokens,
+                ), n_first_dialog_messages_removed
+
+            gen = fake_gen()
+
+        prev_answer = ""
+        async for gen_item in gen:
+            (
+                status,
+                answer,
+                (n_input_tokens, n_output_tokens),
+                n_first_dialog_messages_removed,
+            ) = gen_item
+
+            answer = answer[:4096]  # telegram message limit
+
+            # update only when 100 new symbols are ready
+            if abs(len(answer) - len(prev_answer)) < 100 and status != "finished":
+                continue
+
+            try:
+                await context.bot.edit_message_text(
+                    answer,
+                    chat_id=placeholder_message.chat_id,
+                    message_id=placeholder_message.message_id,
+                    parse_mode=parse_mode,
+                )
+            except telegram.error.BadRequest as e:
+                if str(e).startswith("Message is not modified"):
+                    continue
+                else:
+                    await context.bot.edit_message_text(
+                        answer,
+                        chat_id=placeholder_message.chat_id,
+                        message_id=placeholder_message.message_id,
+                    )
+
+            await asyncio.sleep(0.01)  # wait a bit to avoid flooding
+
+            prev_answer = answer
+
+        # update user data
+        if buf is not None:
+            base_image = base64.b64encode(buf.getvalue()).decode("utf-8")
+#            new_dialog_message = {"user": [
+#                        {
+#                            "type": "text",
+#                            "text": message,
+#                        },
+#                        {
+#                            "type": "image",
+#                            "image": base_image,
+#                        }
+#                    ]
+#                , "bot": answer, "date": datetime.now()}
+
+        #GPT HELP
+
+
+            new_dialog_message = {
+                "user": {
+                    "text": message,
+                    "image": base_image  # Include base64 image string directly in the API payload
+                },
+                "bot": answer,  # This would typically be the response from the model or your system
+                "date": datetime.now()
+            }
+#            def prepare_message_for_external_systems(text_message, image_data=None):
+#                if image_data:
+#            # If external systems require a specific format, create that format here
+#                    return f"{text_message} [image data attached]"
+#                else:
+#                    return text_message
+#                
+#            prepared_message = prepare_message_for_external_systems(message, True)
+#
+#
+#           new_dialog_message = {
+#                "user": prepare_message_for_external_systems(prepared_message, base_image if 'buf' is not None else None),
+#                "bot": answer,
+#                "date": datetime.now()
+#            }
+#
+        #GPT HELP
+
+        else:
+            #new_dialog_message = {"user": [{"type": "text", "text": message}], "bot": answer, "date": datetime.now()}
+            new_dialog_message = {"user": message, "bot": answer, "date": datetime.now()}#the test this works
+            #HERE IS THE ISSUE
+        
+        db.set_dialog_messages(
+            user_id,
+            db.get_dialog_messages(user_id, dialog_id=None) + [new_dialog_message],
+            dialog_id=None
+        )
+
+        db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
+
+    except asyncio.CancelledError:
+        # note: intermediate token updates only work when enable_message_streaming=True (config.yml)
+        db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
+        raise
+
+    except Exception as e:
+        error_text = f"Something went wrong during completion_FIRST_ISSUE. Reason: {e}" #edit
+        logger.error(error_text)
+        await update.message.reply_text(error_text)
+        return
+
+async def _vision_message_handle_fn_OLDDDDDD(
+    update: Update, context: CallbackContext, use_new_dialog_timeout: bool = True
+):
+    logger.info('_vision_message_handle_fn')
+    user_id = update.message.from_user.id
+    current_model = db.get_user_attribute(user_id, "current_model")
+
+    if current_model != "gpt-4-vision-preview":
+        await update.message.reply_text(
+            "🥲 Images processing is only available for <b>gpt-4-vision-preview</b> model. Please change your settings in /settings",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
+
+    # new dialog timeout
+    # Handle dialog timeout for starting a new conversation
+    if use_new_dialog_timeout:
+        if (datetime.now() - db.get_user_attribute(user_id, "last_interaction")).seconds > config.new_dialog_timeout and len(db.get_dialog_messages(user_id)) > 0:
+            db.start_new_dialog(user_id)
+            await update.message.reply_text(f"Starting new dialog due to timeout (<b>{config.chat_modes[chat_mode]['name']}</b> mode) ✅", parse_mode=ParseMode.HTML)
+
+    
+    db.set_user_attribute(user_id, "last_interaction", datetime.now())
+
+    buf = None
+    if update.message.effective_attachment:
+
+        photo = update.message.effective_attachment[-1]
+        photo_file = await context.bot.get_file(photo.file_id)
+
+        # store file in memory, not on disk
+        buf = io.BytesIO()
+        try:
+            await photo_file.download_to_memory(buf)
+            buf.name = "image.jpg"  # file extension is required
+            buf.seek(0)  # move cursor to the beginning of the buffer
+            logger.debug("Downloaded image buffer length: %s", len(buf.getvalue()))
+
+        # Check if buffer has data before proceeding
+            if buf.getvalue():
+                logger.debug("Buffer size before API call: %d bytes", len(buf.getvalue()))
+                logger.debug("Buffer content snippet for debugging: %s", buf.getvalue()[:50])
+                  # log the first 50 bytes
+                logger.debug("Image buffer is ready for processing.")
+            # Proceed to process the image buffer
+            # For example, pass the buffer to a function that handles image processing
+            else:
+                logger.error("Image buffer is empty. Cannot proceed with image processing.")
+            return
+        except Exception as e:
+            logger.error("Failed to process image: %s", str(e))
+            return
+
+    else:
+        logger.debug("No image received in the message.")
+        # If there's no image and it's necessary, handle this case accordingly
+
+    message = update.message.caption or update.message.text or ''
+    dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
+    chatgpt_instance = openai_utils.ChatGPT(model=current_model)
+    if buf is not None and buf.getvalue():
+    # encode and send with image data
+        encoded_image = chatgpt_instance._encode_image(buf)
+        payload = {
+            "image": encoded_image,
+            "text": message
+        }
+    else:
+    # prepare to send text only
+        payload = {
+        "text": message
+    }
+
+    # send placeholder message to user
+    
+    message = update.message.caption or update.message.text or ''
+    dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
+    chatgpt_instance = openai_utils.ChatGPT(model=current_model)
+
+
+    logger.debug(f"User message: {message}")
+    logger.debug(f"Image buffer present: {'Yes' if buf else 'No'}")
+    logger.debug(f"Dialog messages: {json.dumps(dialog_messages, cls=CustomEncoder)}")
+
+
+    placeholder_message = await update.message.reply_text("<i>Making stuff up...</i>", parse_mode=ParseMode.HTML)
+    await update.message.chat.send_action(action="typing")
+    
+    parse_mode = {"html": ParseMode.HTML, "markdown": ParseMode.MARKDOWN}[
+            config.chat_modes[chat_mode]["parse_mode"]
+        ]
+
+    # in case of CancelledError
+    n_input_tokens, n_output_tokens = 0, 0
+
+    
+    try:
+        
+        if config.enable_message_streaming:
+            gen = chatgpt_instance.send_vision_message_stream(
+                message,
+                dialog_messages=dialog_messages,
+                image_buffer=buf,
+                chat_mode=chat_mode,
+            )
+        else:
+            (
+                answer,
+                (n_input_tokens, n_output_tokens),
+                n_first_dialog_messages_removed,
+            ) = await chatgpt_instance.send_vision_message(
+                message,
+                dialog_messages=dialog_messages,
+                image_buffer=buf,
+                chat_mode=chat_mode,
+            )
+
+            async def fake_gen():
+                yield "finished", answer, (
+                    n_input_tokens,
+                    n_output_tokens,
+                ), n_first_dialog_messages_removed
+
+            gen = fake_gen()
+
+        prev_answer = ""
+        async for gen_item in gen:
+            (
+                status,
+                answer,
+                (n_input_tokens, n_output_tokens),
+                n_first_dialog_messages_removed,
+            ) = gen_item
+            logger.debug(f"Generated answer: {answer}")
+            answer = answer[:4096]  # telegram message limit
+
+            # update only when 100 new symbols are ready
+            if abs(len(answer) - len(prev_answer)) < 100 and status != "finished":
+                continue
+
+            try:
+                await context.bot.edit_message_text(
+                    answer,
+                    chat_id=placeholder_message.chat_id,
+                    message_id=placeholder_message.message_id,
+                    parse_mode=parse_mode,
+                )
+            except telegram.error.BadRequest as e:
+                if str(e).startswith("Message is not modified"):
+                    continue
+                else:
+                    await context.bot.edit_message_text(
+                        answer,
+                        chat_id=placeholder_message.chat_id,
+                        message_id=placeholder_message.message_id,
+                    )
+
+            await asyncio.sleep(0.01)  # wait a bit to avoid flooding
+
+            prev_answer = answer
+
+        # update user data
+        logger.debug(f"Preparing to send message: {message} with dialog: {dialog_messages}")
+        if buf is not None:
+            logger.debug(f"Image data is present. Size: {len(buf.getvalue())} bytes")
+            base_image = base64.b64encode(buf.getvalue()).decode("utf-8")
+            new_dialog_message = {"user": [
+                        {
+                            "type": "text",
+                            "text": message,
+                        },
+                        {
+                            "type": "image",
+                            "image": base_image,
+                        }
+                    ]
+                , "bot": answer, "date": datetime.now()}
+        else:
+            new_dialog_message = {"user": [{"type": "text", "text": message}], "bot": answer, "date": datetime.now()}
+        
+        db.set_dialog_messages(
+            user_id,
+            db.get_dialog_messages(user_id, dialog_id=None) + [new_dialog_message],
+            dialog_id=None
+        )
+
+        db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
+
+    except asyncio.CancelledError:
+        # note: intermediate token updates only work when enable_message_streaming=True (config.yml)
+        db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
+        raise
+
+    except Exception as e:
+        error_text = f"Something went wrong during completion FOR VISION. Reason: {e}"
+        logger.error(error_text)
+        await update.message.reply_text(error_text)
+        return
+
+async def unsupport_message_handle(update: Update, context: CallbackContext, message=None):
+    error_text = f"I don't know how to read files or videos. Send the picture in normal mode (Quick Mode)."
+    logger.error(error_text)
+    await update.message.reply_text(error_text)
+    return
+
+#custom commands
+async def show_user_persona(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    # Fetch the user's persona from the database
+    user_persona = db.get_user_persona(user_id)
+
+    # Send a message to the user with their persona
+    await update.message.reply_text(f"Your current persona is ~ `{user_persona}` ~  \n\n Pretty neat huh?", parse_mode='Markdown')
+
+async def token_balance_command(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+    token_balance = db.check_token_balance(user_id)
+    await update.message.reply_text(f"Your current token balance is: `{token_balance}`", parse_mode='Markdown')
+
+async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
+    #user_id = update.effective_user.id
+    user_id = chat_id if chat_id else update.effective_user.id
+    
+    # Define euro amount options for balance top-up
+    euro_amount_options = {
+        "€1.25": 125,  # Example: Add €10 to balance
+        "€20": 2000,  # Example: Add €20 to balance
+        "€50": 5000,  # Example: Add €50 to balance
+        "Other amount...": "custom"  # Custom amount option
+    }
+    
+    # Generate inline keyboard buttons for each euro amount option
+    keyboard = [
+        [InlineKeyboardButton(text, callback_data=f"topup_{amount}")]
+        for text, amount in euro_amount_options.items()
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # Send message with euro amount options
+    await context.bot.send_message(
+        chat_id=user_id,
+        text="Please select the amount you wish to add to your balance:",
+        reply_markup=reply_markup
+    )
+
+async def topup_callback_handle(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+    
+    data = query.data
+
+    if data == "topup_custom":
+        # Prompt the user to enter a custom amount
+        keyboard = [[InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]]
+        await query.edit_message_text(
+            "Please enter the custom amount in euros (e.g., 5 for €5):",
+            reply_markup=InlineKeyboardMarkup[()] #write keyboard in between parathesis if you want the button
+        )
+        # Store a flag in the user's context to indicate awaiting a custom top-up amount
+        context.user_data['awaiting_custom_topup'] = True
+        return
+
+    elif data == "back_to_topup_options":
+        # Logic to show the initial top-up options goes here
+        # For simplicity, you might want to call the same method used to initially display the options
+        context.user_data['awaiting_custom_topup'] = False
+            # Define euro amount options for balance top-up
+        euro_amount_options = {
+            "€1.25": 125,
+            "€20": 2000,
+            "€50": 5000,
+            "Other amount...": "custom"
+        }
+
+    # Generate inline keyboard buttons for each euro amount option
+        keyboard = [
+            [InlineKeyboardButton(text, callback_data=f"topup_{amount if amount != 'custom' else 'custom'}")]
+            for text, amount in euro_amount_options.items()
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # Replace the existing message with the top-up options message
+        await query.edit_message_text(
+            text="Please select the amount you wish to add to your balance:",
+            reply_markup=reply_markup
+        )
+
+#        await topup_handle(update, context, chat_id=query.message.chat_id)
+#        return    
+
+    else:
+        await query.edit_message_text("⏳ Generating payment link...")
+
+        user_id = update.effective_user.id
+        _, amount_str = query.data.split("_")
+        amount_cents = int(amount_str)  # Amount in cents for Stripe
+        #amount_euros = amount_cents / 100  # Convert cents to euros for display
+
+        session_url = await create_stripe_session(user_id, amount_cents, context)
+    
+        # Direct the user to the Stripe Checkout page
+        #await query.edit_message_text(f"Please complete the payment: {session_url}")
+        #await context.bot.send_photo(chat_id=query.message.chat_id, photo=open(config.payment_banner_photo_path, 'rb')) #Send the banner
+
+        payment_text = (
+        f"Tap the button below to complete your €{amount_cents / 100:.2f} payment!\n\n"
+        "🔐 The bot uss a trusted payment service [Stripe](https://stripe.com/legal/ssa). "
+        "**It does not store your payment data.** \n\nOnce you make a payment, you will receive a confirmation message!"
+        )
+        keyboard = [
+        [InlineKeyboardButton("💳Pay", url=session_url)],
+        [InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(text=payment_text, parse_mode='Markdown', reply_markup=reply_markup, disable_web_page_preview=True)
+
+#    await query.edit_message_text(
+#        chat_id=user_id,
+#        text=f"Please complete the payment: {payment_url}"
+#    )
+
+async def create_stripe_session(user_id: int, amount_cents: int, context: CallbackContext):
+    stripe.api_key = config.stripe_secret_key
+    session = stripe.checkout.Session.create(
+        payment_method_types=['card', 'paypal', 'ideal'],
+        line_items=[{
+            'price_data': {
+                'currency': 'eur',
+                'product_data': {'name': 'Balance Top-up'},
+                'unit_amount': amount_cents,
+            },
+            'quantity': 1,
+        }],
+        mode='payment',
+        success_url='https://t.me/ChatdudBot',  # Adjust with your success URL
+        cancel_url='https://t.me/ChatdudBot',  # Adjust with your cancel URL
+        metadata={'user_id': user_id}, # Metadata to track which user is making the payment
+    )
+    return session.url
+
+# Use this function in both your message handler for custom amounts
+# and your callback query handler for predefined amounts.
+
+
+async def send_confirmation_message_async(user_id: int, euro_amount: float):
+    user = db.user_collection.find_one({"_id": user_id})
+    if user:
+        chat_id = user["chat_id"]
+        message = f"Your top-up of €{euro_amount:.2f} was successful! Your new balance will be updated shortly."
+        await bot_instance.send_message(chat_id=chat_id, text=message)
+
+import aioredis
+import threading
+
+def start_asyncio_loop():
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    loop.run_until_complete(start_redis_listener())
+    loop.run_forever()
+
+
+async def start_redis_listener():
+    # For aioredis version 2.x, connect to Redis using the new method
+    redis = aioredis.from_url("redis://redis:6379", encoding="utf-8", decode_responses=True)
+    
+    async with redis.client() as client:
+        sub = client.pubsub()
+        await sub.subscribe('payment_notifications')
+        
+        async for msg in sub.listen():
+            # Process messages
+            if msg['type'] == 'message':
+                data = json.loads(msg['data'])
+                user_id = data['user_id']
+                euro_amount = data['euro_amount']
+                await send_confirmation_message_async(user_id, euro_amount)
+
+async def send_confirmation_message_async(user_id: int, euro_amount: float):
+    user = db.user_collection.find_one({"_id": user_id})
+    if user:
+        chat_id = user["chat_id"]
+        message = f"Your top-up of €{euro_amount:.2f} was successful! Your new balance will be updated shortly."
+        await bot_instance.send_message(chat_id=chat_id, text=message)
+
+#admin commands
+async def admin_command(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    # Check if the user has an admin persona
+    user_persona = db.get_user_persona(user_id)
+
+    if user_persona != "admin":
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+
+    # List of admin commands
+    admin_commands = [
+        "",
+        "/admin - List available admin commands",
+        "/get_user_count - Get the number of users",
+        "/list_user_personas - List users and their persona",
+        "",
+        "Messaging commands:",
+        "",
+        "/send_message_to_id <user_id> <message> ",
+        "/message_username <user_username> <message",
+        "/message_name <user_first_name> <message>",
+        "/message_persona <user_persona> <message>"
+        # Add more admin commands here
+    ]
+    commands_text = "\n".join(admin_commands)
+    await update.message.reply_text(f"Available admin commands:\n{commands_text}")
+
+async def get_user_count(update, context):
+    user_id = update.effective_user.id
+
+    if db.get_user_persona(user_id) != "admin":
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+
+    user_count = db.get_user_count()  # Assuming this method exists and returns the count of users
+    await update.message.reply_text(f"Total number of users: {user_count}")
+
+async def list_user_personas(update, context):
+    user_id = update.effective_user.id
+
+    # Check if the user has the admin persona
+    if db.get_user_persona(user_id) != "admin":
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+
+    users_and_personas = db.get_users_and_personas()  # You will implement this in database.py
+    message_lines = [f"`{user['username']}` | `{user['first_name']}` | `{user['persona']}`" for user in users_and_personas]
+    message_text = "\n\n".join(message_lines)
+
+    await update.message.reply_text(message_text, parse_mode='Markdown')
+
+async def send_message_to_id(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    # Check if the user has the admin persona
+    if db.get_user_persona(user_id) != "admin":
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+
+    # Extract user_id and message from the command
+    try:
+        _, target_user_id, *message_parts = update.message.text.split()
+        message_text = " ".join(message_parts)
+        target_user_id = int(target_user_id)  # Ensure it's an integer
+    except (ValueError, IndexError):
+        await update.message.reply_text("Usage: /send_message_to_user <user_id> <message>")
+        return
+
+    # Use the bot object to send a message to the target user
+    try:
+        await context.bot.send_message(chat_id=target_user_id, text=message_text)
+        await update.message.reply_text(f"Message sent to user {target_user_id}.")
+    except Exception as e:
+        await update.message.reply_text(f"Failed to send message: {str(e)}")
+
+async def send_message_to_username(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    # Check if the user has the admin persona
+    if db.get_user_persona(user_id) != "admin":
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+
+    try:
+        _, username, *message_parts = update.message.text.split()
+        message_text = " ".join(message_parts)
+    except ValueError:
+        await update.message.reply_text("Usage: /send_message_to_username <username> <message>")
+        return
+
+    # Find the user in the database by username
+    target_user = db.find_user_by_username(username.replace("@", ""))
+    if not target_user:
+        await update.message.reply_text(f"User {username} not found.")
+        return
+
+    # Send message
+    try:
+        await context.bot.send_message(chat_id=target_user["_id"], text=message_text)
+        await update.message.reply_text(f"Message sent to {username}.")
+    except Exception as e:
+        await update.message.reply_text(f"Failed to send message: {str(e)}")
+
+async def send_message_to_name(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    if db.get_user_persona(user_id) != "admin":
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+
+    try:
+        _, first_name, *message_parts = update.message.text.split()
+        message_text = " ".join(message_parts)
+    except ValueError:
+        await update.message.reply_text("Usage: /send_message_to_name <first_name> <message>")
+        return
+
+    # Find users by first name
+    users = db.find_users_by_first_name(first_name)
+    if not users:
+        await update.message.reply_text(f"No users found with the first name {first_name}.")
+        return
+
+    # Send message to each user
+    for user in users:
+        try:
+            await context.bot.send_message(chat_id=user["_id"], text=message_text)
+        except Exception as e:
+            # Log or handle individual send errors
+            continue
+    await update.message.reply_text(f"Message sent to users with the first name {first_name}.")
+
+async def send_message_to_persona(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    # Check if the user has the admin persona
+    if db.get_user_persona(user_id) != "admin":
+        await update.message.reply_text("You do not have permission to use this command.")
+        return
+
+    try:
+        _, persona, *message_parts = update.message.text.split()
+        message_text = " ".join(message_parts)
+    except ValueError:
+        await update.message.reply_text("Usage: /send_message_to_persona <persona> <message>")
+        return
+
+    # Find users by persona
+    users = db.find_users_by_persona(persona)
+    if not users:
+        await update.message.reply_text(f"No users found with the persona {persona}.")
+        return
+
+    # Send message to each user
+    for user in users:
+        try:
+            await context.bot.send_message(chat_id=user["_id"], text=message_text)
+        except Exception as e:
+            # Log or handle individual send errors
+            continue
+    await update.message.reply_text(f"Message sent to users with the persona {persona}.")
+
+
+
+# end of admin commands
 
 
 async def message_handle(update: Update, context: CallbackContext, message=None, use_new_dialog_timeout=True):
@@ -217,6 +1022,18 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
     if update.edited_message is not None:
         await edited_message_handle(update, context)
         return
+
+    #vision test
+#    buf = None
+#    if update.message.photo:
+#        # Get the highest resolution photo
+#        photo = update.message.photo[-1]
+#        photo_file = await context.bot.get_file(photo.file_id)
+#        buf = io.BytesIO()
+#        await photo_file.download_to_memory(buf)
+#        buf.seek(0)  # Rewind buffer to the start after downloading    
+
+#    _message = message if message is not None else (update.message.caption or update.message.text or '') 
 
     _message = message or update.message.text
 
@@ -230,13 +1047,90 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
     user_id = update.message.from_user.id
     chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
 
-    #untested1
-    if not await token_balance_preprocessor(update, context):
+    if not await euro_balance_preprocessor(update, context):
         return
-    
+
+    #GITHUB
     if chat_mode == "artist":
         await generate_image_handle(update, context, message=message)
         return
+
+    current_model = db.get_user_attribute(user_id, "current_model")
+
+    #vision test
+    #dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
+#    try:
+#        # Assume send_message can handle text and optional image buffer
+#        answer, (n_input_tokens, n_output_tokens), _ = await openai_utils.send_message(
+#            message=_message,
+#            dialog_messages=dialog_messages,
+#            chat_mode=db.get_user_attribute(user_id, "current_chat_mode"),
+#            image_buffer=buf if buf else None
+#        )
+#vision test
+
+    #custom top up
+    if 'awaiting_custom_topup' in context.user_data and context.user_data['awaiting_custom_topup']:
+        user_input = update.message.text.replace(',', '.')
+        try:
+            custom_amount_euros = float(user_input)
+
+            if custom_amount_euros < 1:
+                keyboard = [[InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]]
+                await context.bot.send_message(
+                    chat_id=update.effective_user.id,
+                    text="The minimum amount for a custom top-up is €5. Please enter a valid amount. \n\n Press the back button to return to top-up options",
+                    reply_markup=InlineKeyboardMarkup(keyboard)
+                )
+                return  # Stop further processing to prevent sending a payment link
+
+            placeholder_message = await update.message.reply_text("⏳ Generating payment link...")
+            placeholder_message_id = placeholder_message.message_id
+
+            custom_amount_cents = int(custom_amount_euros * 100)
+        
+        # Now create a Stripe session for this custom amount
+            payment_url = await create_stripe_session(update.effective_user.id, custom_amount_cents, context)
+        
+        # Send the Stripe payment link to the user
+            payment_text = (
+                f"Tap the button below to complete your €{custom_amount_euros:.2f} payment!\n\n"
+                "🔐The bot uses a trusted payment service [Stripe](https://stripe.com/legal/ssa). "
+                "**It does not store your payment data.** \n\nOnce you make a payment, you will receive a confirmation message!"
+            )
+            keyboard = [
+                [InlineKeyboardButton("💳Pay", url=payment_url)],
+                [InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            # Update the message with payment information
+            await context.bot.edit_message_text(
+                chat_id=update.effective_user.id,
+                message_id=placeholder_message_id,
+                text=payment_text,
+                parse_mode='Markdown',
+                reply_markup=reply_markup,
+                disable_web_page_preview=True
+            )
+
+        # Reset the flag
+            context.user_data['awaiting_custom_topup'] = False
+
+            return
+        
+        except ValueError:
+        # In case of invalid input, prompt again or handle as needed
+            keyboard = [[InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]]
+            await context.bot.send_message(
+                chat_id=update.effective_user.id,
+                text="Invalid amount entered. Please enter a numeric value in euros (e.g., 5 for €5). \n\n Press the back button to return to top-up options",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+            return
+
+    #undested
+    #chatgpt_instance = openai_utils.ChatGPT(model=current_model)
 
     async def message_handle_fn():
         
@@ -249,9 +1143,10 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
 
         # in case of CancelledError
         n_input_tokens, n_output_tokens = 0, 0
-        current_model = db.get_user_attribute(user_id, "current_model")
+        
 
         try:
+    
             # send placeholder message to user
             placeholder_message = await update.message.reply_text("<i>Making shit up...</i>", parse_mode=ParseMode.HTML)
 
@@ -269,8 +1164,10 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             }[config.chat_modes[chat_mode]["parse_mode"]]
 
             chatgpt_instance = openai_utils.ChatGPT(model=current_model)
+
             if config.enable_message_streaming:
                 gen = chatgpt_instance.send_message_stream(_message, dialog_messages=dialog_messages, chat_mode=chat_mode)
+
             else:
                 answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed = await chatgpt_instance.send_message(
                     _message,
@@ -278,15 +1175,20 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                     chat_mode=chat_mode
                 )
 
+                # Handle the response as needed, e.g., sending it back to the user
+#                await context.bot.send_message(chat_id=update.effective_chat.id, text=answer, parse_mode=parse_mode, disable_web_page_preview=True) #repo commit
+                #
                 async def fake_gen():
                     yield "finished", answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed
 
                 gen = fake_gen()
 
             prev_answer = ""
+
             async for gen_item in gen:
                 status, answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed = gen_item
 
+#                answer = current_model + " " + answer #repo commit
                 answer = answer[:4096]  # telegram message limit
 
                 # update only when 100 new symbols are ready
@@ -294,34 +1196,48 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                     continue
 
                 try:
-                    await context.bot.edit_message_text(answer, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=parse_mode)
+                    await context.bot.edit_message_text(answer, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=parse_mode, disable_web_page_preview=True)
                 except telegram.error.BadRequest as e:
                     if str(e).startswith("Message is not modified"):
                         continue
+
                     else:
-                        await context.bot.edit_message_text(answer, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id)
+                        await context.bot.edit_message_text(answer, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, disable_web_page_preview=True) #maybe bug
 
                 await asyncio.sleep(0.01)  # wait a bit to avoid flooding
 
                 prev_answer = answer
 
             # update user data
-            new_dialog_message = {"user": _message, "bot": answer, "date": datetime.now()}
+            new_dialog_message = {"user": _message, "bot": answer, "date": datetime.now()} #this still works
+            #new_dialog_message = {"user": [{"type": "text", "text": _message}], "bot": answer, "date": datetime.now()} #repo commit
+            #HERE IS THE ISSUE
+
             db.set_dialog_messages(
                 user_id,
                 db.get_dialog_messages(user_id, dialog_id=None) + [new_dialog_message],
                 dialog_id=None
             )
-
+            #untested here
+            #db.deduct_tokens_based_on_persona(user_id, n_input_tokens, n_output_tokens)
+        
+            action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model #repo commit #maybe comment this out
+            db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens}) 
+        
             db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
 
         except asyncio.CancelledError:
             # note: intermediate token updates only work when enable_message_streaming=True (config.yml)
             db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
+            #db.deduct_tokens_based_on_persona(user_id, n_input_tokens, n_output_tokens)
+
+            action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model #maybe comment this out
+            db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens}) 
+
             raise
 
         except Exception as e:
-            error_text = f"Something went wrong during completion. Reason: {e}"
+            error_text = f"Something went wrong during completion_SECOND_ISSUE. Reason: {e}" #edit
             logger.error(error_text)
             await update.message.reply_text(error_text)
             return
@@ -334,9 +1250,27 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                 text = f"✍️ <i>Note:</i> Your current dialog is too long, so <b>{n_first_dialog_messages_removed} first messages</b> were removed from the context.\n Send /new command to start new dialog"
             await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
+
+
     async with user_semaphores[user_id]:
-        task = asyncio.create_task(message_handle_fn())
+ #        task = asyncio.create_task(message_handle_fn())
+ #        user_tasks[user_id] = task
+
+        if current_model == "gpt-4-vision-preview" or update.message.photo is not None and len(update.message.photo) > 0:
+            logger.error('gpt-4-vision-preview')
+            if current_model != "gpt-4-vision-preview":
+                current_model = "gpt-4-vision-preview"
+                db.set_user_attribute(user_id, "current_model", "gpt-4-vision-preview")
+            task = asyncio.create_task(
+                _vision_message_handle_fn(update, context, use_new_dialog_timeout=use_new_dialog_timeout)
+            )
+        else:
+            task = asyncio.create_task(
+                message_handle_fn()
+            )            
+
         user_tasks[user_id] = task
+
 
         try:
             await task
@@ -373,8 +1307,11 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
-    #untested1
-    if not await token_balance_preprocessor(update, context):
+    
+    #if not await token_balance_preprocessor(update, context):
+        #return
+
+    if not await euro_balance_preprocessor(update, context):
         return
 
     voice = update.message.voice
@@ -390,9 +1327,14 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     text = f"🎤: <i>{transcribed_text}</i>"
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
 
+    audio_duration_minutes = voice.duration / 60.0
+
+
     # update n_transcribed_seconds
     db.set_user_attribute(user_id, "n_transcribed_seconds", voice.duration + db.get_user_attribute(user_id, "n_transcribed_seconds"))
-
+    #db.deduct_tokens_based_on_persona(user_id, n_input_tokens, n_output_tokens)
+    action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
+    db.deduct_cost_for_action(user_id=user_id, action_type='whisper', action_params={'audio_duration_minutes': audio_duration_minutes}) 
     await message_handle(update, context, message=transcribed_text)
 
 
@@ -402,6 +1344,12 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
+
+    #if not await token_balance_preprocessor(update, context):
+        #return
+
+    if not await euro_balance_preprocessor(update, context):
+        return
 
     await update.message.chat.send_action(action="upload_photo")
 
@@ -416,9 +1364,13 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
             return
         else:
             raise
-
+    
     # token usage
     db.set_user_attribute(user_id, "n_generated_images", config.return_n_generated_images + db.get_user_attribute(user_id, "n_generated_images"))
+    #action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
+    action_type = 'dalle-2'
+    db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_images': config.return_n_generated_images}) 
+    
 
     for i, image_url in enumerate(image_urls):
         await update.message.chat.send_action(action="upload_photo")
@@ -431,6 +1383,7 @@ async def new_dialog_handle(update: Update, context: CallbackContext):
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
+    db.set_user_attribute(user_id, "current_model", "gpt-4-1106-preview")
 
     db.start_new_dialog(user_id)
     await update.message.reply_text("Starting new dialog ✅")
@@ -562,7 +1515,12 @@ def get_settings_menu(user_id: int):
         buttons.append(
             InlineKeyboardButton(title, callback_data=f"set_settings|{model_key}")
         )
-    reply_markup = InlineKeyboardMarkup([buttons])
+
+    half_size = len(buttons) // 2
+    first_row = buttons[:half_size]
+    second_row = buttons[half_size:]
+
+    reply_markup = InlineKeyboardMarkup([first_row, second_row])
 
     return text, reply_markup
 
@@ -603,6 +1561,8 @@ async def show_balance_handle(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
+    current_token_balance = db.check_token_balance(user_id)
+
     # count total usage statistics
     total_n_spent_dollars = 0
     total_n_used_tokens = 0
@@ -639,6 +1599,7 @@ async def show_balance_handle(update: Update, context: CallbackContext):
 
     text = f"You spent <b>{total_n_spent_dollars:.03f}$</b>\n"
     text += f"You used <b>{total_n_used_tokens}</b> tokens\n\n"
+    text += f"Your token balance is <b>{current_token_balance}</b> \n\n"
     text += details_text
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
@@ -646,7 +1607,7 @@ async def show_balance_handle(update: Update, context: CallbackContext):
 
 async def edited_message_handle(update: Update, context: CallbackContext):
 
-    #untested
+    
 
 
     if update.edited_message.chat.type == "private":
@@ -679,17 +1640,31 @@ async def error_handle(update: Update, context: CallbackContext) -> None:
     except:
         await context.bot.send_message(update.effective_chat.id, "Some error in error handler")
 
+#set bot commands
 async def post_init(application: Application):
     await application.bot.set_my_commands([
-        BotCommand("/new", "Start new dialog"),
-        BotCommand("/mode", "Select chat mode"),
-        BotCommand("/retry", "Re-generate response for previous query"),
-        BotCommand("/balance", "Show balance"),
-        BotCommand("/settings", "Show settings"),
-        BotCommand("/help", "Show help message"),
+        BotCommand("/new", "Start new dialog 🆕"),
+        BotCommand("/retry", "Re-generate response for previous query 🔁"),
+        BotCommand("/mode", "Select chat mode 🎭"),
+        BotCommand("/balance", "Show balance 💰"),
+        BotCommand("/topup", "Top-up your balance 💳"), 
+        BotCommand("/settings", "Show settings ⚙️"),
+        BotCommand("/help", "Show help message ❓"),
+        BotCommand("/persona", "Show your persona 🎫")
+
+         
     ])
 
+bot_instance = None
+
 def run_bot() -> None:
+
+    global bot_instance
+    application = ApplicationBuilder().token(config.telegram_token).build()
+    bot_instance = application.bot
+
+    update_user_personas_from_config(db, config.personas)
+
     application = (
         ApplicationBuilder()
         .token(config.telegram_token)
@@ -715,6 +1690,9 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("help_group_chat", help_group_chat_handle, filters=user_filter))
 
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & user_filter, message_handle))
+    application.add_handler(MessageHandler(filters.PHOTO & ~filters.COMMAND & user_filter, message_handle))
+    application.add_handler(MessageHandler(filters.VIDEO & ~filters.COMMAND & user_filter, unsupport_message_handle))
+    application.add_handler(MessageHandler(filters.Document.ALL & ~filters.COMMAND & user_filter, unsupport_message_handle))
     application.add_handler(CommandHandler("retry", retry_handle, filters=user_filter))
     application.add_handler(CommandHandler("new", new_dialog_handle, filters=user_filter))
     application.add_handler(CommandHandler("cancel", cancel_handle, filters=user_filter))
@@ -729,6 +1707,21 @@ def run_bot() -> None:
     application.add_handler(CallbackQueryHandler(set_settings_handle, pattern="^set_settings"))
 
     application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
+    #custom commands
+    application.add_handler(CommandHandler('persona', show_user_persona))
+    application.add_handler(CommandHandler('token_balance', token_balance_command))
+    application.add_handler(CommandHandler("topup", topup_handle, filters=filters.ALL))
+#    application.add_handler(CallbackQueryHandler(topup_callback_handle, pattern='^topup_'))
+    application.add_handler(CallbackQueryHandler(topup_callback_handle))
+
+    #admin commands
+    application.add_handler(CommandHandler("admin", admin_command))
+    application.add_handler(CommandHandler('get_user_count', get_user_count))
+    application.add_handler(CommandHandler('list_user_personas', list_user_personas))
+    application.add_handler(CommandHandler('message_id', send_message_to_id))
+    application.add_handler(CommandHandler('message_username', send_message_to_username))
+    application.add_handler(CommandHandler('message_name', send_message_to_name))
+    application.add_handler(CommandHandler('message_persona', send_message_to_persona))
 
     application.add_error_handler(error_handle)
 
@@ -737,4 +1730,8 @@ def run_bot() -> None:
 
 
 if __name__ == "__main__":
+    thread = threading.Thread(target=start_asyncio_loop, daemon=True)
+    thread.start()
+    
     run_bot()
+    #redis_thread.join()

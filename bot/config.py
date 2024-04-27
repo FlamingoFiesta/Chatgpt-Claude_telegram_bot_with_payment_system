@@ -14,6 +14,8 @@ config_env = dotenv.dotenv_values(config_dir / "config.env")
 # config parameters
 telegram_token = config_yaml["telegram_token"]
 openai_api_key = config_yaml["openai_api_key"]
+stripe_secret_key = config_yaml["stripe_secret_key"]
+stripe_webhook_secret = config_yaml.get("stripe_webhook_secret", None)  # Using .get() with a default value of None
 openai_api_base = config_yaml.get("openai_api_base", None)
 allowed_telegram_usernames = config_yaml["allowed_telegram_usernames"]
 new_dialog_timeout = config_yaml["new_dialog_timeout"]
@@ -22,6 +24,10 @@ return_n_generated_images = config_yaml.get("return_n_generated_images", 1)
 image_size = config_yaml.get("image_size", "512x512")
 n_chat_modes_per_page = config_yaml.get("n_chat_modes_per_page", 5)
 mongodb_uri = f"mongodb://mongo:{config_env['MONGODB_PORT']}"
+model_pricing = config_yaml.get('model_pricing', {})
+persona_deduction_rates = config_yaml.get('persona_deduction_rates', {})
+personas = config_yaml.get('personas', {})
+
 
 # chat_modes
 with open(config_dir / "chat_modes.yml", 'r') as f:
@@ -33,3 +39,5 @@ with open(config_dir / "models.yml", 'r') as f:
 
 # files
 help_group_chat_video_path = Path(__file__).parent.parent.resolve() / "static" / "help_group_chat.mp4"
+
+payment_banner_photo_path = Path(__file__).parent.parent.resolve() / "static" / "payment_banner.png"

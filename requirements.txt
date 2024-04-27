@@ -4,3 +4,8 @@ tiktoken>=0.3.0
 PyYAML==6.0
 pymongo==4.3.3
 python-dotenv==0.21.0
+stripe>=2.60.0
+Flask==2.0.1
+Werkzeug==2.0.1
+redis>=4.0.2
+aioredis>=2.0.0
