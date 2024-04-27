@@ -392,29 +392,29 @@ async def _vision_message_handle_fn(
         # update user data
         if buf is not None:
             base_image = base64.b64encode(buf.getvalue()).decode("utf-8")
-#            new_dialog_message = {"user": [
-#                        {
-#                            "type": "text",
-#                            "text": message,
-#                        },
-#                        {
-#                            "type": "image",
-#                            "image": base_image,
-#                        }
-#                    ]
-#                , "bot": answer, "date": datetime.now()}
+            new_dialog_message = {"user": [
+                        {
+                            "type": "text",
+                            "text": message,
+                        },
+                        {
+                            "type": "image",
+                            "image": base_image,
+                        }
+                    ]
+                , "bot": answer, "date": datetime.now()}
 
         #GPT HELP
 
 
-            new_dialog_message = {
-                "user": {
-                    "text": message,
-                    "image": base_image  # Include base64 image string directly in the API payload
-                },
-                "bot": answer,  # This would typically be the response from the model or your system
-                "date": datetime.now()
-            }
+#            new_dialog_message = {
+#                "user": {
+#                    "text": message,
+#                    "image": base_image  # Include base64 image string directly in the API payload
+#                },
+#                "bot": answer,  # This would typically be the response from the model or your system
+#                "date": datetime.now()
+#            }
 #            def prepare_message_for_external_systems(text_message, image_data=None):
 #                if image_data:
 #            # If external systems require a specific format, create that format here
