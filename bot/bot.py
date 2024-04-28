@@ -46,23 +46,28 @@ user_tasks = {}
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s') #logging error
 HELP_MESSAGE = """Commands:
 
-⚪ /retry – Regenerate last bot answer
-⚪ /new – Start new dialog
-⚪ /mode – Select chat mode
-⚪ /settings – Show settings
-⚪ /balance – Show balance
-⚪ /topup – Add credits to your account
-⚪ /help – Show help
-⚪ /persona – Show your persona
+⚪ /new – Start new dialog 
+⚪ /retry – Regenerate last bot answer 
+⚪ /mode – Select chat mode 
+⚪ /balance – Show balance 
+⚪ /topup – Add credits to your account 
+⚪ /settings – Show settings 
+⚪ /help – Show the commands
+⚪ /role – Show your role 
 
 🎨 Generate images from text prompts in <b>👩‍🎨 Artist</b> /mode
 👥 Add bot to <b>group chat</b>: /help_group_chat
 🎤 You can send <b>Voice Messages</b> instead of text
-"""
 
+Important notes:\n
+1. The <b>longer</b> your dialog, the <b>more tokens</b> are spent with each new message, <i><b>I remember our conversation!</b></i> \nTo start a <b>new dialog</b>, send the /new command\n
+2. <b>Cyber Dud</b> is the default <b>blank mode</b>, it has no special instructions as to how to act. Experiment with the other <b>modes</b> and see which one suits you best!
+
+"""
+#add "(see <b>video</b> below)" after instructions if you have the video set up
 HELP_GROUP_CHAT_MESSAGE = """You can add bot to any <b>group chat</b> to help and entertain its participants!
 
-Instructions (see <b>video</b> below):
+Instructions:
 1. Add the bot to the group chat
 2. Make it an <b>admin</b>, so that it can see messages (all other rights can be restricted)
 3. You're awesome!
@@ -152,8 +157,13 @@ async def start_handle(update: Update, context: CallbackContext):
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
     db.start_new_dialog(user_id)
 
-    reply_text = "Heyo! I'm <b>Chatdud</b> , Nice to meet ya! \n\n I'm a telegram bot that helps you use ChatGPT 🤖\n\n"
-    reply_text += "I'm currently in development, for any issues or feedback, feel free to contact my developer @pas_stilat_de_pastilate \n\n"
+    reply_text = "👋 Heyoo! I'm <b>Chatdud</b>, your friendly neighborhood chatbot. Nice to meet ya! \n\n"
+    reply_text += "     I'm a telegram bot 🤖 powered by <b>ChatGPT</b>, and I'm here to help with any questions you might have. \n\n"
+    reply_text += "You might ask yourself:\n  <i><b>Why use this bot when I can just use ChatGPT in my browser?</b></i> 🤔\n\n"
+    reply_text += "  Well, I use a <b>top-up</b> balance system, meaning you can pay as you go. Don't worry about no monthly $20 subscription!\n\n"
+    reply_text += "Also, there is <b>no message limit</b> per hour. As long as you have at least <b>€1.25</b> to feed me, we can chat <b>as much as you want!</b>\n Ain’t that cool?? 😎\n\n"
+    reply_text += " 🤫 Psst!\nDon't tell my creator, buut <b>the first euro is on the house!</b> \n\n You have plenty of time to decide if you want to continue using me and support us both. <b>We really appreciate it!</b> 🥰 \n\n"
+    reply_text += "I'm currently in development, for any <b>issues</b> or <b>feedback</b>, don't hesitate to contact my developer @pas_stilat_de_pastilate \n\n"
     reply_text += HELP_MESSAGE
 
     await update.message.reply_text(reply_text, parse_mode=ParseMode.HTML)
@@ -175,10 +185,10 @@ async def help_group_chat_handle(update: Update, context: CallbackContext):
      text = HELP_GROUP_CHAT_MESSAGE.format(bot_username="@" + context.bot.username)
 
      await update.message.reply_text(text, parse_mode=ParseMode.HTML)
-     await update.message.reply_video(config.help_group_chat_video_path)
+     #await update.message.reply_video(config.help_group_chat_video_path) remove the comment if you want the video to be sent
 
 
-#from config import personas
+#use if you want to check for tokens
 async def token_balance_preprocessor(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     current_balance = db.check_token_balance(user_id)
@@ -187,7 +197,7 @@ async def token_balance_preprocessor(update: Update, context: CallbackContext):
     if user_persona == "admin":
         return True
 
-    if db.check_token_balance(user_id) < 1:  # Number of minimum tokens needed
+    if db.check_token_balance(user_id) < 10:  # Number of minimum tokens needed
         context.user_data['process_allowed'] = False
         await update.message.reply_text(
             f"_Oops, your balance is too low :( Please top up to continue._ \n\n Your current balance is {current_balance}",
@@ -200,7 +210,7 @@ async def token_balance_preprocessor(update: Update, context: CallbackContext):
 
 async def euro_balance_preprocessor(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
-    current_euro_balance = db.get_user_euro_balance(user_id)  # This function needs to be implemented
+    current_euro_balance = db.get_user_euro_balance(user_id)  
     minimum_euro_required = 0.01  # Set the minimum required balance in euros. This value should be dynamic based on the operation.
 
     if current_euro_balance < minimum_euro_required:  
@@ -671,8 +681,8 @@ async def show_user_persona(update: Update, context: CallbackContext):
     # Fetch the user's persona from the database
     user_persona = db.get_user_persona(user_id)
 
-    # Send a message to the user with their persona
-    await update.message.reply_text(f"Your current persona is ~ `{user_persona}` ~  \n\n Pretty neat huh?", parse_mode='Markdown')
+    # Send a message to the user with their role
+    await update.message.reply_text(f"Your current role is ~ `{user_persona}` ~  \n\n Pretty neat huh?", parse_mode='Markdown')
 
 async def token_balance_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -1495,46 +1505,27 @@ async def set_chat_mode_handle(update: Update, context: CallbackContext):
 
 
 def get_settings_menu(user_id: int):
-    current_model = db.get_user_attribute(user_id, "current_model")
-    text = config.models["info"][current_model]["description"]
+    text = "⚙️ Settings:"
 
-    text += "\n\n"
-    score_dict = config.models["info"][current_model]["scores"]
-    for score_key, score_value in score_dict.items():
-        text += "🟢" * score_value + "⚪️" * (5 - score_value) + f" – {score_key}\n\n"
-
-    text += "\nSelect <b>model</b>:"
-
-    # buttons to choose models
-    buttons = []
-    for model_key in config.models["available_text_models"]:
-        title = config.models["info"][model_key]["name"]
-        if model_key == current_model:
-            title = "✅ " + title
-
-        buttons.append(
-            InlineKeyboardButton(title, callback_data=f"set_settings|{model_key}")
-        )
-
-    half_size = len(buttons) // 2
-    first_row = buttons[:half_size]
-    second_row = buttons[half_size:]
-
-    reply_markup = InlineKeyboardMarkup([first_row, second_row])
+    # Define the buttons for the settings menu
+    keyboard = [
+        [InlineKeyboardButton("🧠 AI Model", callback_data='ai_model')],
+        [InlineKeyboardButton("🎨 Artist Model", callback_data='artist_model')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
     return text, reply_markup
 
-
 async def settings_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
-    if await is_previous_message_not_answered_yet(update, context): return
+    if await is_previous_message_not_answered_yet(update, context):
+        return
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
     text, reply_markup = get_settings_menu(user_id)
     await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
-
 
 async def set_settings_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update.callback_query, context, update.callback_query.from_user)
@@ -1545,24 +1536,95 @@ async def set_settings_handle(update: Update, context: CallbackContext):
 
     _, model_key = query.data.split("|")
     db.set_user_attribute(user_id, "current_model", model_key)
-    db.start_new_dialog(user_id)
 
-    text, reply_markup = get_settings_menu(user_id)
-    try:
-        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
-    except telegram.error.BadRequest as e:
-        if str(e).startswith("Message is not modified"):
-            pass
+    await display_model_info(query, user_id, context)
 
 
-async def show_balance_handle(update: Update, context: CallbackContext):
+async def display_model_info(query, user_id, context):
+    current_model = db.get_user_attribute(user_id, "current_model")
+    model_info = config.models["info"][current_model]
+    description = model_info["description"]
+    scores = model_info["scores"]
+    
+    details_text = f"{description}\n\n"
+    for score_key, score_value in scores.items():
+        details_text += f"🟢{'🟢' * score_value}⚪️{'⚪️' * (5 - score_value)} – {score_key}\n"
+    
+    details_text += "\nSelect <b>model</b>:"
+    
+    buttons = []
+    for model_key in config.models["available_text_models"]:
+        title = config.models["info"][model_key]["name"]
+        if model_key == current_model:
+            title = "✅ " + title
+        buttons.append(InlineKeyboardButton(title, callback_data=f"set_settings|{model_key}"))
+    
+    half_size = len(buttons) // 2
+    first_row = buttons[:half_size]
+    second_row = buttons[half_size:]
+    back_button = [InlineKeyboardButton("⬅️", callback_data='back_to_settings')]
+    reply_markup = InlineKeyboardMarkup([first_row, second_row, back_button])
+    
+    await query.edit_message_text(text=details_text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+#for the settings menu
+async def callback_query_handler(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    data = query.data
+    user_id = query.from_user.id
+
+    if data == 'ai_model':
+        # Display the current AI Model details
+        current_model = db.get_user_attribute(user_id, "current_model")
+        text = f"{config.models['info'][current_model]['description']}\n\n"
+
+        score_dict = config.models["info"][current_model]["scores"]
+        for score_key, score_value in score_dict.items():
+            text += f"🟢{'🟢' * score_value}⚪️{'⚪️' * (5 - score_value)} – {score_key}\n"
+
+        text += "\nSelect <b>model</b>:\n"
+        buttons = []
+        for model_key in config.models["available_text_models"]:
+            title = config.models["info"][model_key]["name"]
+            if model_key == current_model:
+                title = "✅ " + title
+            buttons.append(InlineKeyboardButton(title, callback_data=f"set_settings|{model_key}"))
+
+        half_size = len(buttons) // 2
+        first_row = buttons[:half_size]
+        second_row = buttons[half_size:]
+        back_button = [InlineKeyboardButton("⬅️", callback_data='back_to_settings')]
+        reply_markup = InlineKeyboardMarkup([first_row, second_row, back_button])
+
+        await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+    elif data.startswith('set_settings|'):
+        _, model_key = data.split("|")
+        db.set_user_attribute(user_id, "current_model", model_key)
+        await display_model_info(query, user_id, context)  # keep the existing reply_markup
+
+    elif data == 'artist_model':
+        text = "🎨 Artist Model: <b>Currently not supported. Will be implemented soon</b>\n"
+        back_button = [InlineKeyboardButton("⬅️", callback_data='back_to_settings')]
+        reply_markup = InlineKeyboardMarkup([back_button])
+        await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+    elif data == 'back_to_settings':
+        text, reply_markup = get_settings_menu(user_id)  # pass user_id correctly
+        await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+#name this show_balance_handle and change the name of the other one if you want all the details shown in one place
+async def show_balance_handle_full_details(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
     current_token_balance = db.check_token_balance(user_id)
-
+    current_euro_balance = db.get_user_euro_balance(user_id)
+    
     # count total usage statistics
     total_n_spent_dollars = 0
     total_n_used_tokens = 0
@@ -1596,13 +1658,72 @@ async def show_balance_handle(update: Update, context: CallbackContext):
 
     total_n_spent_dollars += voice_recognition_n_spent_dollars
 
-
-    text = f"You spent <b>{total_n_spent_dollars:.03f}$</b>\n"
+    text = f"Your euro balance is <b>€{current_euro_balance}</b> \n\n"
+    text += f"You spent ≈ <b>{total_n_spent_dollars:.03f}$</b>\n"
     text += f"You used <b>{total_n_used_tokens}</b> tokens\n\n"
-    text += f"Your token balance is <b>{current_token_balance}</b> \n\n"
     text += details_text
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+
+async def show_balance_handle(update: Update, context: CallbackContext):
+    await register_user_if_not_exists(update, context, update.message.from_user)
+
+    user_id = update.message.from_user.id
+    db.set_user_attribute(user_id, "last_interaction", datetime.now())
+
+    current_token_balance = db.check_token_balance(user_id) #if you use token balance
+    current_euro_balance = db.get_user_euro_balance(user_id)
+
+    text = f"Your euro balance is <b>€{current_euro_balance:.2f}</b> 💶\n\n"
+    text += "Press 'Details' for more information.\n"
+
+    keyboard = [
+        [InlineKeyboardButton("🏷️ Details", callback_data='show_details')]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+async def callback_show_details(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    current_euro_balance = db.get_user_euro_balance(user_id)
+
+    # Fetch usage statistics
+    n_used_tokens_dict = db.get_user_attribute(user_id, "n_used_tokens")
+    n_generated_images = db.get_user_attribute(user_id, "n_generated_images")
+    n_transcribed_seconds = db.get_user_attribute(user_id, "n_transcribed_seconds")
+    
+    details_text = "🏷️ Details:\n"
+    total_n_spent_dollars = 0
+    total_n_used_tokens = 0
+    for model_key in sorted(n_used_tokens_dict.keys()):
+        n_input_tokens, n_output_tokens = n_used_tokens_dict[model_key]["n_input_tokens"], n_used_tokens_dict[model_key]["n_output_tokens"]
+        total_n_used_tokens += n_input_tokens + n_output_tokens
+
+        n_input_spent_dollars = config.models["info"][model_key]["price_per_1000_input_tokens"] * (n_input_tokens / 1000)
+        n_output_spent_dollars = config.models["info"][model_key]["price_per_1000_output_tokens"] * (n_output_tokens / 1000)
+        total_n_spent_dollars += n_input_spent_dollars + n_output_spent_dollars
+
+        details_text += f"- {model_key}: <b>{n_input_spent_dollars + n_output_spent_dollars:.03f}$</b> / <b>{n_input_tokens + n_output_tokens} tokens</b>\n"
+
+    # image generation and voice recognition calculations, similar to the initial function
+    image_generation_n_spent_dollars = config.models["info"]["dalle-2"]["price_per_1_image"] * n_generated_images
+    voice_recognition_n_spent_dollars = config.models["info"]["whisper"]["price_per_1_min"] * (n_transcribed_seconds / 60)
+
+    total_n_spent_dollars += image_generation_n_spent_dollars + voice_recognition_n_spent_dollars
+
+    details_text += f"- DALL·E 2 (image generation): <b>{image_generation_n_spent_dollars:.03f}$</b> / <b>{n_generated_images} images</b>\n"
+    details_text += f"- Whisper (voice recognition): <b>{voice_recognition_n_spent_dollars:.03f}$</b> / <b>{n_transcribed_seconds:.01f} seconds</b>\n"
+
+    text = f"Your euro balance is <b>€{current_euro_balance:.3f}</b> 💶\n\n"
+    text += f"You spent ≈ <b>{total_n_spent_dollars:.03f}$</b> 💵\n"
+    text += f"You used <b>{total_n_used_tokens}</b> tokens 🪙\n\n"
+    text += details_text
+
+    await query.edit_message_text(text=text, parse_mode=ParseMode.HTML)
 
 
 async def edited_message_handle(update: Update, context: CallbackContext):
@@ -1650,7 +1771,7 @@ async def post_init(application: Application):
         BotCommand("/topup", "Top-up your balance 💳"), 
         BotCommand("/settings", "Show settings ⚙️"),
         BotCommand("/help", "Show help message ❓"),
-        BotCommand("/persona", "Show your persona 🎫")
+        BotCommand("/role", "Show your role 🎫")
 
          
     ])
@@ -1705,10 +1826,12 @@ def run_bot() -> None:
 
     application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_settings_handle, pattern="^set_settings"))
+    application.add_handler(CallbackQueryHandler(callback_query_handler))
 
     application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
+    application.add_handler(CallbackQueryHandler(callback_show_details, pattern='^show_details$'))
     #custom commands
-    application.add_handler(CommandHandler('persona', show_user_persona))
+    application.add_handler(CommandHandler('role', show_user_persona))
     application.add_handler(CommandHandler('token_balance', token_balance_command))
     application.add_handler(CommandHandler("topup", topup_handle, filters=filters.ALL))
 #    application.add_handler(CallbackQueryHandler(topup_callback_handle, pattern='^topup_'))

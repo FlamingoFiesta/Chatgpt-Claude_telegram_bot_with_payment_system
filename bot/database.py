@@ -53,7 +53,7 @@ class Database:
             "n_transcribed_seconds": 0.0,  # voice message transcription
             "token_balance": 1000,  # Initialize token balance for new users
             "persona": "trial_user",
-            "euro_balance": 0
+            "euro_balance": 1
         }
 
         if not self.check_if_user_exists(user_id):
@@ -130,7 +130,7 @@ class Database:
             {"$set": {"messages": dialog_messages}}
         )
     
-    #untested
+    #new additions, they work tho
     def check_token_balance(self, user_id: int) -> int:
         """Check the user's current token balance."""
         user = self.user_collection.find_one({"_id": user_id})
