@@ -690,7 +690,7 @@ async def token_balance_command(update: Update, context: CallbackContext):
     await update.message.reply_text(f"Your current token balance is: `{token_balance}`", parse_mode='Markdown')
 
 async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
-    #user_id = update.effective_user.id
+
     user_id = chat_id if chat_id else update.effective_user.id
     
     # Define euro amount options for balance top-up
@@ -703,7 +703,7 @@ async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
     
     # Generate inline keyboard buttons for each euro amount option
     keyboard = [
-        [InlineKeyboardButton(text, callback_data=f"topup_{amount}")]
+        [InlineKeyboardButton(text, callback_data=f"topup|topup_{amount}")]
         for text, amount in euro_amount_options.items()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -711,7 +711,7 @@ async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
     # Send message with euro amount options
     await context.bot.send_message(
         chat_id=user_id,
-        text="Please select the amount you wish to add to your balance:",
+        text="Please select the amount you wish to add to your balance:\n\n", #topup 1.25 message
         reply_markup=reply_markup
     )
 
@@ -721,20 +721,19 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
     
     data = query.data
 
-    if data == "topup_custom":
+    if data == "topup|topup_custom":
         # Prompt the user to enter a custom amount
-        keyboard = [[InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]]
+        keyboard = [[InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]]
         await query.edit_message_text(
             "Please enter the custom amount in euros (e.g., 5 for €5):",
-            reply_markup=InlineKeyboardMarkup[()] #write keyboard in between parathesis if you want the button
+            reply_markup=InlineKeyboardMarkup([]) #write keyboard in between parathesis if you want the button
         )
         # Store a flag in the user's context to indicate awaiting a custom top-up amount
         context.user_data['awaiting_custom_topup'] = True
         return
 
-    elif data == "back_to_topup_options":
+    elif data == "topup|back_to_topup_options":
         # Logic to show the initial top-up options goes here
-        # For simplicity, you might want to call the same method used to initially display the options
         context.user_data['awaiting_custom_topup'] = False
             # Define euro amount options for balance top-up
         euro_amount_options = {
@@ -746,7 +745,7 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
 
     # Generate inline keyboard buttons for each euro amount option
         keyboard = [
-            [InlineKeyboardButton(text, callback_data=f"topup_{amount if amount != 'custom' else 'custom'}")]
+            [InlineKeyboardButton(text, callback_data=f"topup|topup_{amount if amount != 'custom' else 'custom'}")]
             for text, amount in euro_amount_options.items()
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -755,10 +754,7 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
         await query.edit_message_text(
             text="Please select the amount you wish to add to your balance:",
             reply_markup=reply_markup
-        )
-
-#        await topup_handle(update, context, chat_id=query.message.chat_id)
-#        return    
+        ) 
 
     else:
         await query.edit_message_text("⏳ Generating payment link...")
@@ -766,30 +762,28 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
         user_id = update.effective_user.id
         _, amount_str = query.data.split("_")
         amount_cents = int(amount_str)  # Amount in cents for Stripe
-        #amount_euros = amount_cents / 100  # Convert cents to euros for display
 
         session_url = await create_stripe_session(user_id, amount_cents, context)
     
-        # Direct the user to the Stripe Checkout page
-        #await query.edit_message_text(f"Please complete the payment: {session_url}")
         #await context.bot.send_photo(chat_id=query.message.chat_id, photo=open(config.payment_banner_photo_path, 'rb')) #Send the banner
 
+    # Conditional warning for the €1.25 top-up
+        if amount_cents == 125:  # Check if the amount is 125 cents (€1.25)                                                    
+            warning_message = "\n\n*Note:* Stripe charges a €0.25 fee per transaction. Therefore, you'll receive a €1.00 credit so that I don't end up loosing money. \nFor all other payment options, I'll take care of the tax for you. \nThank you for understanding! ❤️"
+        else:
+            warning_message = ""
+
         payment_text = (
-        f"Tap the button below to complete your €{amount_cents / 100:.2f} payment!\n\n"
-        "🔐 The bot uss a trusted payment service [Stripe](https://stripe.com/legal/ssa). "
-        "**It does not store your payment data.** \n\nOnce you make a payment, you will receive a confirmation message!"
+        f"Tap the button below to complete your *€{amount_cents / 100:.2f}* payment! {warning_message}\n\n"
+        "🔐 The bot uses a *trusted* payment service [Stripe](https://stripe.com/legal/ssa). "
+        "*It does not store your payment data.* \n\nOnce you make a payment, you will receive a confirmation message!"
         )
         keyboard = [
         [InlineKeyboardButton("💳Pay", url=session_url)],
-        [InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]
+        [InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(text=payment_text, parse_mode='Markdown', reply_markup=reply_markup, disable_web_page_preview=True)
-
-#    await query.edit_message_text(
-#        chat_id=user_id,
-#        text=f"Please complete the payment: {payment_url}"
-#    )
 
 async def create_stripe_session(user_id: int, amount_cents: int, context: CallbackContext):
     stripe.api_key = config.stripe_secret_key
@@ -818,7 +812,7 @@ async def send_confirmation_message_async(user_id: int, euro_amount: float):
     user = db.user_collection.find_one({"_id": user_id})
     if user:
         chat_id = user["chat_id"]
-        message = f"Your top-up of €{euro_amount:.2f} was successful! Your new balance will be updated shortly."
+        message = f"Your top-up of *€{euro_amount:.2f}* was *successful!* Your new balance will be updated shortly."
         await bot_instance.send_message(chat_id=chat_id, text=message)
 
 import aioredis
@@ -1085,8 +1079,8 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         try:
             custom_amount_euros = float(user_input)
 
-            if custom_amount_euros < 1:
-                keyboard = [[InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]]
+            if custom_amount_euros < 1: #mininum ammount custom
+                keyboard = [[InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]]
                 await context.bot.send_message(
                     chat_id=update.effective_user.id,
                     text="The minimum amount for a custom top-up is €5. Please enter a valid amount. \n\n Press the back button to return to top-up options",
@@ -1104,13 +1098,13 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         
         # Send the Stripe payment link to the user
             payment_text = (
-                f"Tap the button below to complete your €{custom_amount_euros:.2f} payment!\n\n"
-                "🔐The bot uses a trusted payment service [Stripe](https://stripe.com/legal/ssa). "
-                "**It does not store your payment data.** \n\nOnce you make a payment, you will receive a confirmation message!"
+                f"Tap the button below to complete your *€{custom_amount_euros:.2f}* payment!\n\n"
+                "🔐The bot uses a *trusted* payment service [Stripe](https://stripe.com/legal/ssa). "
+                "*It does not store your payment data.* \n\nOnce you make a payment, you will receive a confirmation message!"
             )
             keyboard = [
                 [InlineKeyboardButton("💳Pay", url=payment_url)],
-                [InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]
+                [InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -1131,7 +1125,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         
         except ValueError:
         # In case of invalid input, prompt again or handle as needed
-            keyboard = [[InlineKeyboardButton("⬅️", callback_data="back_to_topup_options")]]
+            keyboard = [[InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]]
             await context.bot.send_message(
                 chat_id=update.effective_user.id,
                 text="Invalid amount entered. Please enter a numeric value in euros (e.g., 5 for €5). \n\n Press the back button to return to top-up options",
@@ -1139,9 +1133,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             )
             return
 
-    #undested
     #chatgpt_instance = openai_utils.ChatGPT(model=current_model)
-
     async def message_handle_fn():
         
         # new dialog timeout
@@ -1509,8 +1501,8 @@ def get_settings_menu(user_id: int):
 
     # Define the buttons for the settings menu
     keyboard = [
-        [InlineKeyboardButton("🧠 AI Model", callback_data='ai_model')],
-        [InlineKeyboardButton("🎨 Artist Model", callback_data='artist_model')]
+        [InlineKeyboardButton("🧠 AI Model", callback_data='model-ai_model')],
+        [InlineKeyboardButton("🎨 Artist Model", callback_data='model-artist_model')]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
@@ -1557,25 +1549,30 @@ async def display_model_info(query, user_id, context):
         title = config.models["info"][model_key]["name"]
         if model_key == current_model:
             title = "✅ " + title
-        buttons.append(InlineKeyboardButton(title, callback_data=f"set_settings|{model_key}"))
+        buttons.append(InlineKeyboardButton(title, callback_data=f"model-set_settings|{model_key}"))
     
     half_size = len(buttons) // 2
     first_row = buttons[:half_size]
     second_row = buttons[half_size:]
-    back_button = [InlineKeyboardButton("⬅️", callback_data='back_to_settings')]
+    back_button = [InlineKeyboardButton("⬅️", callback_data='model-back_to_settings')]
     reply_markup = InlineKeyboardMarkup([first_row, second_row, back_button])
     
-    await query.edit_message_text(text=details_text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+    try:
+        await query.edit_message_text(text=details_text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+    except telegram.error.BadRequest as e:
+        if "Message is not modified" in str(e):
+            # Optionally, inform the user that no changes were detected, or simply pass to avoid noise.
+            pass
 
 #for the settings menu
-async def callback_query_handler(update: Update, context: CallbackContext):
+async def model_settings_handler(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
 
     data = query.data
     user_id = query.from_user.id
 
-    if data == 'ai_model':
+    if data == 'model-ai_model':
         # Display the current AI Model details
         current_model = db.get_user_attribute(user_id, "current_model")
         text = f"{config.models['info'][current_model]['description']}\n\n"
@@ -1590,28 +1587,28 @@ async def callback_query_handler(update: Update, context: CallbackContext):
             title = config.models["info"][model_key]["name"]
             if model_key == current_model:
                 title = "✅ " + title
-            buttons.append(InlineKeyboardButton(title, callback_data=f"set_settings|{model_key}"))
+            buttons.append(InlineKeyboardButton(title, callback_data=f"model-set_settings|{model_key}"))
 
         half_size = len(buttons) // 2
         first_row = buttons[:half_size]
         second_row = buttons[half_size:]
-        back_button = [InlineKeyboardButton("⬅️", callback_data='back_to_settings')]
+        back_button = [InlineKeyboardButton("⬅️", callback_data='model-back_to_settings')]
         reply_markup = InlineKeyboardMarkup([first_row, second_row, back_button])
 
         await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
-    elif data.startswith('set_settings|'):
+    elif data.startswith('model-set_settings|'):
         _, model_key = data.split("|")
         db.set_user_attribute(user_id, "current_model", model_key)
-        await display_model_info(query, user_id, context)  # keep the existing reply_markup
+        await display_model_info(query, user_id, context)  # keep the existing reply_markup       
 
-    elif data == 'artist_model':
+    elif data == 'model-artist_model':
         text = "🎨 Artist Model: <b>Currently not supported. Will be implemented soon</b>\n"
-        back_button = [InlineKeyboardButton("⬅️", callback_data='back_to_settings')]
+        back_button = [InlineKeyboardButton("⬅️", callback_data='model-back_to_settings')]
         reply_markup = InlineKeyboardMarkup([back_button])
         await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
-    elif data == 'back_to_settings':
+    elif data == 'model-back_to_settings':
         text, reply_markup = get_settings_menu(user_id)  # pass user_id correctly
         await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
@@ -1685,6 +1682,7 @@ async def show_balance_handle(update: Update, context: CallbackContext):
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
 async def callback_show_details(update: Update, context: CallbackContext):
+    print("Details button pressed")
     query = update.callback_query
     await query.answer()
 
@@ -1723,7 +1721,12 @@ async def callback_show_details(update: Update, context: CallbackContext):
     text += f"You used <b>{total_n_used_tokens}</b> tokens 🪙\n\n"
     text += details_text
 
-    await query.edit_message_text(text=text, parse_mode=ParseMode.HTML)
+    print("Attempting to edit message")
+    try:
+        await query.edit_message_text(text=text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        print(f"Failed to edit message: {e}")
+    print("Message edit attempted")
 
 
 async def edited_message_handle(update: Update, context: CallbackContext):
@@ -1826,7 +1829,8 @@ def run_bot() -> None:
 
     application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_settings_handle, pattern="^set_settings"))
-    application.add_handler(CallbackQueryHandler(callback_query_handler))
+    #application.add_handler(CallbackQueryHandler(callback_query_handler_BONK))
+    application.add_handler(CallbackQueryHandler(model_settings_handler, pattern='^model-'))
 
     application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(callback_show_details, pattern='^show_details$'))
@@ -1834,8 +1838,8 @@ def run_bot() -> None:
     application.add_handler(CommandHandler('role', show_user_persona))
     application.add_handler(CommandHandler('token_balance', token_balance_command))
     application.add_handler(CommandHandler("topup", topup_handle, filters=filters.ALL))
-#    application.add_handler(CallbackQueryHandler(topup_callback_handle, pattern='^topup_'))
-    application.add_handler(CallbackQueryHandler(topup_callback_handle))
+    application.add_handler(CallbackQueryHandler(topup_callback_handle, pattern='^topup\\|'))
+    #application.add_handler(CallbackQueryHandler(topup_callback_handle))
 
     #admin commands
     application.add_handler(CommandHandler("admin", admin_command))
