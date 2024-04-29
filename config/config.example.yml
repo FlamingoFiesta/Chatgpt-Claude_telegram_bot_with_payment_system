@@ -1,0 +1,41 @@
+telegram_token: ""
+openai_api_key: ""
+stripe_secret_key: "" 
+stripe_webhook_secret: "" # live one
+#stripe_webhook_secret: "whsec_454a93acc1f0bf5c2ba5ebf7c64726d89ea02621be5fe1b4e3701e135f6433ad" # if you want to test it
+openai_api_base: null  # leave null to use default api base or you can put your own base url here
+allowed_telegram_usernames: []  # if empty, the bot is available to anyone. pass a username string to allow it and/or user ids as positive integers and/or channel ids as negative integers
+new_dialog_timeout: 600  # new dialog starts after timeout (in seconds)
+return_n_generated_images: 1
+n_chat_modes_per_page: 5
+image_size: "1024x1024" # the image size for image generation. Generated images can have a size of 256x256, 512x512, or 1024x1024 pixels. Smaller sizes are faster to generate.
+enable_message_streaming: true  # if set, messages will be shown to user word-by-word
+
+# prices
+chatgpt_price_per_1000_tokens: 0.002
+gpt_price_per_1000_tokens: 0.02
+whisper_price_per_1_min: 0.006
+
+model_pricing: # per 1k tokens, regularly update from openAI's pricing page to be accurate
+  gpt-3.5-turbo: 0.003  
+  gpt-3.5-turbo-16k: 0.0035 
+  gpt-4-1106-preview: 0.04
+  gpt-4-vision-preview: 0.04  
+  gpt-4: 0.12  
+  text-davinci-003: 0.006  
+  dalle-2: 0.020 #per image
+  whisper: 0.008 #per minute
+
+persona_deduction_rates:
+  admin: 0
+  beta_tester: 1.05
+  friend: 0
+  regular_user: 1.1
+  trial_user: 1
+
+personas:
+  admin: []
+  beta_tester: [] 
+  friend: [] 
+  regular_user: []
+  trial_user: []
