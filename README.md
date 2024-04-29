@@ -1,7 +1,7 @@
 # ChatGPT Telegram Bot: **GPT-4. Fast. No daily limits. Special chat modes** Karfly Fork
 
 <div align="center">
-//<img src="https://raw.githubusercontent.com/FlamingoFiesta/Chatgpt_telegram_bot_karfly-fork/main/static/header.png" align="center" style="width: 100%" />
+<img src="https://raw.githubusercontent.com/FlamingoFiesta/Chatgpt_telegram_bot_karfly-fork/main/static/header.png" align="center" style="width: 100%" />
 </div>
 
 <br>
