@@ -1,4 +1,4 @@
-# ChatGPT Telegram Bot: **No daily limits. Special chat modes** Fork
+# ChatGPT Telegram Bot fork: **No daily limits. Special chat modes** 
 
 <div align="center">
 <img src="https://raw.githubusercontent.com/FlamingoFiesta/Chatgpt_telegram_bot_karfly-fork/main/static/header.png" align="center" style="width: 100%" />
