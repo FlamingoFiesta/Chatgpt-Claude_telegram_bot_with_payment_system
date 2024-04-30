@@ -757,6 +757,7 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
         ) 
 
     else:
+        
         await query.edit_message_text("⏳ Generating payment link...")
 
         user_id = update.effective_user.id
@@ -783,6 +784,14 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
         [InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
+#        await context.bot.send_photo( 
+#            chat_id=query.message.chat_id,
+#            photo=open(config.payment_banner_photo_path, 'rb'),
+#            caption=payment_text,
+#            parse_mode='Markdown',
+#            reply_markup=reply_markup
+#        ) #banner new
+#        await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
         await query.edit_message_text(text=payment_text, parse_mode='Markdown', reply_markup=reply_markup, disable_web_page_preview=True)
 
 async def create_stripe_session(user_id: int, amount_cents: int, context: CallbackContext):
@@ -887,7 +896,7 @@ async def get_user_count(update, context):
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
-    user_count = db.get_user_count()  # Assuming this method exists and returns the count of users
+    user_count = db.get_user_count()  
     await update.message.reply_text(f"Total number of users: {user_count}")
 
 async def list_user_personas(update, context):
@@ -898,8 +907,11 @@ async def list_user_personas(update, context):
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
-    users_and_personas = db.get_users_and_personas()  # You will implement this in database.py
-    message_lines = [f"`{user['username']}` | `{user['first_name']}` | `{user['persona']}`" for user in users_and_personas]
+    users_and_personas = db.get_users_and_personas()  
+    message_lines = [
+        f"`{user.get('username', 'No Username')}` | `{user.get('first_name', 'No First Name')}` | `{user.get('persona', 'No Persona')}`" 
+        for user in users_and_personas
+    ]
     message_text = "\n\n".join(message_lines)
 
     await update.message.reply_text(message_text, parse_mode='Markdown')
