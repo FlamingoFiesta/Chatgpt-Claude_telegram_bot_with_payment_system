@@ -2,7 +2,6 @@ telegram_token: ""
 openai_api_key: ""
 stripe_secret_key: "" 
 stripe_webhook_secret: "" # live one
-#stripe_webhook_secret: "whsec_454a93acc1f0bf5c2ba5ebf7c64726d89ea02621be5fe1b4e3701e135f6433ad" # if you want to test it
 openai_api_base: null  # leave null to use default api base or you can put your own base url here
 allowed_telegram_usernames: []  # if empty, the bot is available to anyone. pass a username string to allow it and/or user ids as positive integers and/or channel ids as negative integers
 new_dialog_timeout: 600  # new dialog starts after timeout (in seconds)
