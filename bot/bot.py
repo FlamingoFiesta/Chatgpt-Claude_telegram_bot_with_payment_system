@@ -813,7 +813,15 @@ async def send_confirmation_message_async(user_id: int, euro_amount: float):
     if user:
         chat_id = user["chat_id"]
         message = f"Your top-up of *€{euro_amount:.2f}* was *successful!* Your new balance will be updated shortly."
-        await bot_instance.send_message(chat_id=chat_id, text=message)
+
+        if user.get("persona") == "trial_user":
+            db.user_collection.update_one(
+                {"_id": user_id},
+                {"$set": {"persona": "regular_user"}}
+            )
+            message += "\n\nYou have been upgraded to the role of *regular user*! Thank you so much for supporting this project, youre amazing! ❤️"
+
+        await bot_instance.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
 
 import aioredis
 import threading
@@ -841,12 +849,7 @@ async def start_redis_listener():
                 euro_amount = data['euro_amount']
                 await send_confirmation_message_async(user_id, euro_amount)
 
-async def send_confirmation_message_async(user_id: int, euro_amount: float):
-    user = db.user_collection.find_one({"_id": user_id})
-    if user:
-        chat_id = user["chat_id"]
-        message = f"Your top-up of €{euro_amount:.2f} was successful! Your new balance will be updated shortly."
-        await bot_instance.send_message(chat_id=chat_id, text=message)
+
 
 #admin commands
 async def admin_command(update: Update, context: CallbackContext):
@@ -1011,6 +1014,68 @@ async def send_message_to_persona(update: Update, context: CallbackContext):
             # Log or handle individual send errors
             continue
     await update.message.reply_text(f"Message sent to users with the persona {persona}.")
+
+#persona test
+async def change_persona(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    # Assuming 'personas' is a dictionary in your config with user roles and their corresponding user IDs
+    if user_id not in config.personas['admin']:
+        await update.message.reply_text("You're not allowed to use this command.")
+        return
+
+    # Fetch the current user's persona
+    user_data = db.user_collection.find_one({"_id": user_id})
+    current_persona = user_data.get("persona", "No persona set") if user_data else "No user data found"
+
+    # Define available personas
+    personas = ["admin", "beta_tester", "friend",  "regular_user", "trial_user"]
+
+    # Generate buttons for each persona, marking the current persona with a checkmark
+    keyboard = [
+        [InlineKeyboardButton(f"{persona} {'✅' if persona == current_persona else ''}", callback_data=f"set_persona|{persona}")]
+        for persona in personas
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    # Send message with persona options
+    await update.message.reply_text(
+        "Please choose a persona to switch to:",
+        reply_markup=reply_markup
+    )
+
+
+async def handle_persona_change(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    data = query.data
+
+    if data.startswith('set_persona|'):
+        new_persona = data.split('|')[1]
+        
+        # Update the user's persona in the database
+        db.user_collection.update_one(
+            {"_id": user_id},
+            {"$set": {"persona": new_persona}}
+        )
+        
+        # Fetch the updated persona list with the current persona now being the new_persona
+        personas = ["admin", "beta_tester", "friend",  "regular_user", "trial_user"]
+        
+        # Regenerate keyboard with updated checkmark
+        keyboard = [
+            [InlineKeyboardButton(f"{persona} {'✅' if persona == new_persona else ''}", callback_data=f"set_persona|{persona}")]
+            for persona in personas
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        # Update the message with the new keyboard
+        await query.edit_message_text(
+            text="Please choose a persona to switch to:",
+            reply_markup=reply_markup
+        )
 
 
 
@@ -1835,7 +1900,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(callback_show_details, pattern='^show_details$'))
     #custom commands
-    application.add_handler(CommandHandler('role', show_user_persona))
+    application.add_handler(CommandHandler('persona', show_user_persona))
     application.add_handler(CommandHandler('token_balance', token_balance_command))
     application.add_handler(CommandHandler("topup", topup_handle, filters=filters.ALL))
     application.add_handler(CallbackQueryHandler(topup_callback_handle, pattern='^topup\\|'))
@@ -1849,6 +1914,8 @@ def run_bot() -> None:
     application.add_handler(CommandHandler('message_username', send_message_to_username))
     application.add_handler(CommandHandler('message_name', send_message_to_name))
     application.add_handler(CommandHandler('message_persona', send_message_to_persona))
+    application.add_handler(CommandHandler('change_persona', change_persona))
+    application.add_handler(CallbackQueryHandler(handle_persona_change, pattern='^set_persona\\|'))
 
     application.add_error_handler(error_handle)
 
