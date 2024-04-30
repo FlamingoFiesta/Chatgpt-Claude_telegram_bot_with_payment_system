@@ -20,7 +20,7 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - mongo
-      - redis
+      - redis #payment
 
   mongo_express:
     container_name: mongo-express
@@ -37,7 +37,7 @@ services:
       - ME_CONFIG_BASICAUTH_PASSWORD=${MONGO_EXPRESS_PASSWORD:-password}
     depends_on:
       - mongo
-
+  #delete everything below if not payment system
   flask_app: # Flask application for handling Stripe webhooks
     container_name: flask_stripe_webhook
     build:
@@ -54,7 +54,7 @@ services:
     depends_on:
       - mongo
       - redis
-      
+
   redis:
     container_name: redis
     image: redis:latest

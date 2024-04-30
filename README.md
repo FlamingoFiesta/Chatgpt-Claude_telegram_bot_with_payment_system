@@ -74,14 +74,16 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 
 2. Get your Telegram bot token from [@BotFather](https://t.me/BotFather)
 
-3. Get your Stripe [secret key](https://dashboard.stripe.com/apikeys) and your [webhook secret](https://dashboard.stripe.com/webhooks) (optional if you dont want to use the payment system)
+3. Get your Stripe [secret key](https://dashboard.stripe.com/apikeys) (optional if you dont want to use the payment system)
 
-4. Edit `config/config.example.yml` to set your tokens, stripe key and webhook secret, then run the 2 commands below (*if you're advanced user, you can also edit* `config/config.example.env`):
+4. Edit `config/config.example.yml` to set your tokens, stripe key (if you choose to use stripe), then run the 2 commands below (*if you're advanced user, you can also edit* `config/config.example.env`):
     ```bash
     mv config/config.example.yml config/config.yml
     mv config/config.example.env config/config.env
     ```
-5. (optional) Setup ngrok to automatically update the users balance after payment and send them a confirmation message (ignore this if you dont want to update your balance automatically and in real time)
+5. Download and install [docker](https://www.docker.com/), then open the app.
+   
+6. **(Optional)** Setup ngrok to automatically update the users balance after payment and send them a confirmation message (ignore this if you dont want to update your balance automatically and in real time, skip to step 7)
 
    1. Download ngrok:
         - Go to the ngrok [website](https://ngrok.com/download).
@@ -91,35 +93,73 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
    2. Unzip the folder
       
    3. Connect your account
-        - For mac:
+        - For MacOS:
           - Open terminal
           - Navigate to the folder where you unziped ngrok (e.g. ```cd Downloads```).
           - Run:
               ```bash
               ./ngrok authtoken <YOUR_AUTH_TOKEN>
              ```    
+          - Keep the terminal window open
+  
           
-        - For windows:
+        - For Windows:
           - Open Command Prompt.
           - Open terminal and navigate to the folder where you unziped ngrok (e.g. ```cd Downloads```).
           - Run: 
               ```bash
               ngrok.exe authtoken <YOUR_AUTH_TOKEN> 
-             ```  
-        - Keep the terminal window open
+             ```
+              
+          - Keep the terminal window open
           
    4. Run ngrok
-        - For mac:
-          - Run: ./ngrok http 5000
+        - For MacOS:
+          - Run: 
               ```bash
               ./ngrok http 5000
              ```  
+          - You will see a status screen with the URL next to "Forwarding" in the format of "https://NUMBERS.ngrok-free.app", you will need it in bit
+          - Keep the terminal open, ngrok will keep running as long as the terminal window is open.
+            
+        - For Windows
+          - Run: 
+             ```bash
+              ngrok.exe http 5000
+            ```  
+          - You will see a status screen with the URL next to "Forwarding" in the format of "https://NUMBERS.ngrok-free.app", you will need it in bit
+          - Keep the terminal open, ngrok will keep running as long as the terminal window is open.
+            
+    5. Add the webhook endpoint to the Stripe dashboard
+        - Go to the [webhook](https://dashboard.stripe.com/webhooks) section in your stripe dashboard by following the link or find it under the ```Developers``` section
+        - Click ```Add endpoint```
+        - In the ```Endpoint URL``` field, enter the URL you got from ngrok followed by **/stripe-webhook**
+          - For this example it would be ```https://NUMBERS.ngrok-free.app/stripe-webhook```
+        - Click ```+Select events```
+        - Under the **Checkout** section, select ```checkout.session.completed```. Now **Add event** then **Add endpoint**.
+        - Click on **Reveal** under **Signing secret** and copy the webhook secret
+          
+    6. Edit `config/config.yml` to set your webhook secret
+       
+    7. Please note that the free plan for ngrok gives you a new URL everytime you run the service, which means that you have to keep it running all the time and update the URL in the         stripe dashboard if you restart ngrok. For a static domain, you need to have the paid subscription.
+       
+    8. Now youre done setting up the payment system, good job! 
+          
+7. **(Optional for those that havent configured the payment system but recommended for efficiency)** If you did not configure the payment system with stripe, you can run the bot as is but it will create two extra containers that have no use for you which will use extra memory. Edit the ```docker-compose.yml``` file, find the comment that says ```payment``` and delete the redis line, also find the comment that says ```#delete everything below if not payment system``` and delete everything that is under it.
+    - At the moment, if you select a payment ammount youll get an error stating you dont have the API key, in the future I'll make it handle the error gracefuly and send a message           stating that you did not configure the payment system.
 
-NOT FINISHED
-
-6. 🔥 And now **run**:
+8. 🔥 And now, cd to the ```Chatgpt_telegram_bot_karfly-fork``` directory **run**:
     ```bash
     docker-compose --env-file config/config.env up --build
     ```
+##
+
+## ❤️ Top Donations
+If you found my fork useful, use the topup command in my bot for any donations!
+Send me a message so that I know it was you who donated, you can be on this list:
+
+## Contributors
+- [Karfly](https://github.com/father-bot/chatgpt_telegram_bot) for the foundation of the code
+- FlamingoFiesta
 
 
