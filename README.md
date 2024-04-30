@@ -64,7 +64,7 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 - `/retry` – Regenerate last bot answer
 - `/mode` – Select chat mode
 - `/balance` – Show balance
-- `//topup` – Add credits to your account 
+- `/topup` – Add credits to your account 
 - `/settings` – Show settings
 - `/help` – Show the commands
 - `/role` – Show your role
@@ -110,11 +110,12 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
           
    4. Run ngrok
         - For mac:
-          - Run: ./ngrok http 80
+          - Run: ./ngrok http 5000
               ```bash
-              ./ngrok http 80
+              ./ngrok http 5000
              ```  
 
+NOT FINISHED
 
 6. 🔥 And now **run**:
     ```bash
