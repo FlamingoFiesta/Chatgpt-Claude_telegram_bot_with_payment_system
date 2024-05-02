@@ -20,7 +20,7 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - mongo
-      - redis #payment
+#      - redis #payment
 
   mongo_express:
     container_name: mongo-express
