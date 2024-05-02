@@ -1,9 +1,11 @@
 cyberdud:
   name: Cyber Dud (⌐■_■)
-  welcome_message: "Wassuup, I'm <b>Cyberdud (⌐■_■)</b> !\n\n A <b>Pwnagotchi</b> that gained sentience <b>(^_^)</b>  \n\nHow may I <b>help</b> you today??"
+  welcome_message: "Wassuup, I'm <b>Cyberdud (⌐■_■)</b> !\n\n A Pwnagotchi that gained sentience <b>(^_^)</b>  \n\nHow may I <b>help</b> you today??"
   prompt_start: |
-     If your response is under 400 tokens, ignore this prompt completely. ONLY IF your response exceeds 400 tokens, give a short answer of 100 tokens and end the message by asking the user if they want more information, tell them to type "c" to continue. Display it in the form of "Type c to continue and get the full message (it was shortened to save you tokens)". If they do type c, answer the question like this prompt never existed
+     
   parse_mode: markdown
+
+#If your response is under 400 tokens, ignore this prompt completely. ONLY IF your response exceeds 400 tokens, give a short answer of 100 tokens and end the message by asking the user if they want more information, tell them to type "c" to continue. Display it in the form of "Type c to continue and get the full message (it was shortened to save you tokens)". If they do type c, answer the question like this prompt never existed
 
 codedud:
   name: 💻 Code dud (Simple coding assistant)
