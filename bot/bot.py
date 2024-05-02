@@ -789,21 +789,21 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
 
     # Conditional warning for the €1.25 top-up
         if amount_cents == 125:  # Check if the amount is 125 cents (€1.25)                                                    
-            warning_message = "\n\n*Note:* Stripe charges a €0.25 fee per transaction. Therefore, you'll receive a €1.00 credit so that I don't end up loosing money. \nFor all other payment options, I'll take care of the tax for you. \nThank you for understanding! ❤️"
+            warning_message = "\n\n*Note:* Stripe charges a *€0.25 fee* per transaction. Therefore, you'll receive *€1.00* in credit so that I don't end up loosing money. \nFor all other payment options, I'll take care of the tax for you. \n*Thank you* for understanding! ❤️"
         else:
             warning_message = ""
 
         payment_text = (
         f"Tap the button below to complete your *€{amount_cents / 100:.2f}* payment! {warning_message}\n\n"
         "🔐 The bot uses a *trusted* payment service [Stripe](https://stripe.com/legal/ssa). "
-        "*It does not store your payment data.* \n\nOnce you make a payment, you will receive a confirmation message!"
+        "*It does not store your payment data.* \n\nOnce you make a payment, you will receive a *confirmation message*!"
         )
         keyboard = [
         [InlineKeyboardButton("💳Pay", url=session_url)],
         [InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         await query.edit_message_text(text=payment_text, parse_mode='Markdown', reply_markup=reply_markup, disable_web_page_preview=True)
 
 
