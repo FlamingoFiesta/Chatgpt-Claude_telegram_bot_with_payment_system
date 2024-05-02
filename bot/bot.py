@@ -696,9 +696,12 @@ async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
     # Define euro amount options for balance top-up
     euro_amount_options = {
         "€1.25": 125,  # Example: Add €10 to balance
-        "€20": 2000,  # Example: Add €20 to balance
-        "€50": 5000,  # Example: Add €50 to balance
-        "Other amount...": "custom"  # Custom amount option
+        "€3": 300,  # Example: Add €10 to balance
+        "€5": 500,  # Example: Add €10 to balance
+        "€10": 1000,  # Example: Add €20 to balance
+        "€20": 2000,  # Example: Add €50 to balance
+        "Other amount...": "custom",  # Custom amount option
+        "Donation ❤️": "donation"
     }
     
     # Generate inline keyboard buttons for each euro amount option
@@ -707,12 +710,15 @@ async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
         for text, amount in euro_amount_options.items()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
+    #banner test
+    await context.bot.send_photo(chat_id=user_id, photo=open(config.payment_banner_photo_path, 'rb')) #Send the banner
+
     # Send message with euro amount options
     await context.bot.send_message(
         chat_id=user_id,
-        text="Please select the amount you wish to add to your balance:\n\n", #topup 1.25 message
-        reply_markup=reply_markup
+        text="Currently supported payment methods: *Card*, *GooglePay*, *PayPal*, *iDeal*.\n\nPlease select the *amount* you wish to add to your *balance*:\n\n", #topup 1.25 message
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
     )
 
 async def topup_callback_handle(update: Update, context: CallbackContext):
@@ -721,26 +727,38 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
     
     data = query.data
 
-    if data == "topup|topup_custom":
+    #context.user_data['is_donation'] = False
+
+    if data == "topup|topup_custom" or data == "topup|topup_donation":
+        #custom_type = "donation" if "donation" in data else "custom"
+        is_donation = "donation" in data
+        prompt_text = "Thank you for considering *donating*! \n\nPlease enter the *donation* amount in euros(e.g., *5* for *€5*):" if is_donation == "donation" else "Please enter the *custom amount* in euros (e.g., *5* for *€5*):"
         # Prompt the user to enter a custom amount
         keyboard = [[InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]]
         await query.edit_message_text(
-            "Please enter the custom amount in euros (e.g., 5 for €5):",
-            reply_markup=InlineKeyboardMarkup([]) #write keyboard in between parathesis if you want the button
+            text=prompt_text,
+            reply_markup=InlineKeyboardMarkup([]), #write keyboard instead of the brackets "[]" if you want the button
+            parse_mode='Markdown'
         )
-        # Store a flag in the user's context to indicate awaiting a custom top-up amount
-        context.user_data['awaiting_custom_topup'] = True
+        
+        context.user_data['awaiting_custom_topup'] = "donation" if is_donation else "custom" # Store a flag in the user's context to indicate awaiting a custom top-up amount
+        context.user_data['is_donation'] = is_donation # store a flag in the user's context to differentiate between donation and others
+
         return
 
     elif data == "topup|back_to_topup_options":
-        # Logic to show the initial top-up options goes here
+        
         context.user_data['awaiting_custom_topup'] = False
+        context.user_data.pop('is_donation', None)
             # Define euro amount options for balance top-up
         euro_amount_options = {
-            "€1.25": 125,
-            "€20": 2000,
-            "€50": 5000,
-            "Other amount...": "custom"
+            "€1.25": 125,  # Example: Add €10 to balance
+            "€3": 300,  # Example: Add €10 to balance
+            "€5": 500,  # Example: Add €10 to balance
+            "€10": 1000,  # Example: Add €20 to balance
+            "€20": 2000,  # Example: Add €50 to balance
+            "Other amount...": "custom",  # Custom amount option
+            "Donation ❤️": "donation"
         }
 
     # Generate inline keyboard buttons for each euro amount option
@@ -752,14 +770,15 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
 
     # Replace the existing message with the top-up options message
         await query.edit_message_text(
-            text="Please select the amount you wish to add to your balance:",
-            reply_markup=reply_markup
+            text="Currently supported payment methods: *Card*, *GooglePay*, *PayPal*, *iDeal*.\n\nPlease select the *amount* you wish to add to your *balance*:",
+            reply_markup=reply_markup,
+            parse_mode='Markdown'
         ) 
 
     else:
         
         await query.edit_message_text("⏳ Generating payment link...")
-
+        context.user_data.pop('is_donation', None)
         user_id = update.effective_user.id
         _, amount_str = query.data.split("_")
         amount_cents = int(amount_str)  # Amount in cents for Stripe
@@ -784,24 +803,21 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
         [InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-#        await context.bot.send_photo( 
-#            chat_id=query.message.chat_id,
-#            photo=open(config.payment_banner_photo_path, 'rb'),
-#            caption=payment_text,
-#            parse_mode='Markdown',
-#            reply_markup=reply_markup
-#        ) #banner new
-#        await context.bot.delete_message(chat_id=query.message.chat_id, message_id=query.message.message_id)
+        
         await query.edit_message_text(text=payment_text, parse_mode='Markdown', reply_markup=reply_markup, disable_web_page_preview=True)
+
+
 
 async def create_stripe_session(user_id: int, amount_cents: int, context: CallbackContext):
     stripe.api_key = config.stripe_secret_key
+    is_donation = context.user_data.get('is_donation', False)
+    product_name = "Donation❤️" if is_donation else "Balance Top-up"
     session = stripe.checkout.Session.create(
         payment_method_types=['card', 'paypal', 'ideal'],
         line_items=[{
             'price_data': {
                 'currency': 'eur',
-                'product_data': {'name': 'Balance Top-up'},
+                'product_data': {'name': product_name},
                 'unit_amount': amount_cents,
             },
             'quantity': 1,
@@ -809,28 +825,32 @@ async def create_stripe_session(user_id: int, amount_cents: int, context: Callba
         mode='payment',
         success_url='https://t.me/ChatdudBot',  # Adjust with your success URL
         cancel_url='https://t.me/ChatdudBot',  # Adjust with your cancel URL
-        metadata={'user_id': user_id}, # Metadata to track which user is making the payment
+        metadata={'user_id': user_id, 'is_donation': str(is_donation).lower()}, # Metadata to track which user is making the payment
     )
     return session.url
 
-# Use this function in both your message handler for custom amounts
-# and your callback query handler for predefined amounts.
 
-
-async def send_confirmation_message_async(user_id: int, euro_amount: float):
+async def send_confirmation_message_async(user_id, euro_amount, is_donation):
     user = db.user_collection.find_one({"_id": user_id})
     if user:
         chat_id = user["chat_id"]
-        message = f"Your top-up of *€{euro_amount:.2f}* was *successful!* Your new balance will be updated shortly."
+        #is_donation = context.user_data.get('is_donation', False)
 
-        if user.get("persona") == "trial_user":
-            db.user_collection.update_one(
-                {"_id": user_id},
-                {"$set": {"persona": "regular_user"}}
-            )
-            message += "\n\nYou have been upgraded to the role of *regular user*! Thank you so much for supporting this project, youre amazing! ❤️"
+        if is_donation:
+            message = f"Thank you *so much* for your generous donation of *€{euro_amount:.2f}*! Your support is *greatly appreciated*!! ❤️❤️"
+            
+        else:
+            message = f"Your top-up of *€{euro_amount:.2f}* was *successful!*🎉 \n\nYour new balance will be updated shortly."
+            if user.get("persona") == "trial_user":
+                db.user_collection.update_one(
+                    {"_id": user_id},
+                    {"$set": {"persona": "regular_user"}}
+                )
+                message += "\n\nYou have been upgraded to the role of *regular user*! Thank you *so much* for supporting this project, you're *amazing*! ❤️"
 
         await bot_instance.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
+
+
 
 import aioredis
 import threading
@@ -856,7 +876,8 @@ async def start_redis_listener():
                 data = json.loads(msg['data'])
                 user_id = data['user_id']
                 euro_amount = data['euro_amount']
-                await send_confirmation_message_async(user_id, euro_amount)
+                is_donation = data.get('is_donation', False)
+                await send_confirmation_message_async(user_id, euro_amount, is_donation)
 
 
 
@@ -877,6 +898,7 @@ async def admin_command(update: Update, context: CallbackContext):
         "/admin - List available admin commands",
         "/get_user_count - Get the number of users",
         "/list_user_personas - List users and their persona",
+        "/change_persona works even if youre not currently admin role",
         "",
         "Messaging commands:",
         "",
@@ -1027,7 +1049,6 @@ async def send_message_to_persona(update: Update, context: CallbackContext):
             continue
     await update.message.reply_text(f"Message sent to users with the persona {persona}.")
 
-#persona test
 async def change_persona(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
@@ -1156,16 +1177,25 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         try:
             custom_amount_euros = float(user_input)
 
-            if custom_amount_euros < 1: #mininum ammount custom
+            min_amount = 3
+            error_message = "The *minimum* amount for a *custom top-up* is *€3*. Please enter a *valid* amount."
+
+            # Adjust minimum amount and error message for donations
+            if context.user_data['awaiting_custom_topup'] == "donation":
+                min_amount = 1
+                error_message = "The *minimum* amount for a *donation* is *€1*. Please enter a *valid* amount."
+
+            if custom_amount_euros < min_amount: #mininum ammount custom
                 keyboard = [[InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]]
                 await context.bot.send_message(
                     chat_id=update.effective_user.id,
-                    text="The minimum amount for a custom top-up is €5. Please enter a valid amount. \n\n Press the back button to return to top-up options",
-                    reply_markup=InlineKeyboardMarkup(keyboard)
+                    text=f"{error_message}\n\n Press the *back button* to return to *top-up options*",
+                    reply_markup=InlineKeyboardMarkup(keyboard),
+                    parse_mode='Markdown'
                 )
                 return  # Stop further processing to prevent sending a payment link
 
-            placeholder_message = await update.message.reply_text("⏳ Generating payment link...")
+            placeholder_message = await update.message.reply_text("⏳ Generating payment *link*...", parse_mode='Markdown')
             placeholder_message_id = placeholder_message.message_id
 
             custom_amount_cents = int(custom_amount_euros * 100)
@@ -1173,9 +1203,11 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         # Now create a Stripe session for this custom amount
             payment_url = await create_stripe_session(update.effective_user.id, custom_amount_cents, context)
         
+            thank_you_message = "\n\nThank you so much for your *donation*! ❤️" if context.user_data['awaiting_custom_topup'] == "donation" else ""
+
         # Send the Stripe payment link to the user
             payment_text = (
-                f"Tap the button below to complete your *€{custom_amount_euros:.2f}* payment!\n\n"
+                f"Tap the button below to complete your *€{custom_amount_euros:.2f}* payment!{thank_you_message}\n\n"
                 "🔐The bot uses a *trusted* payment service [Stripe](https://stripe.com/legal/ssa). "
                 "*It does not store your payment data.* \n\nOnce you make a payment, you will receive a confirmation message!"
             )
@@ -1184,6 +1216,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                 [InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
+            
 
             # Update the message with payment information
             await context.bot.edit_message_text(
@@ -1205,8 +1238,9 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             keyboard = [[InlineKeyboardButton("⬅️", callback_data="topup|back_to_topup_options")]]
             await context.bot.send_message(
                 chat_id=update.effective_user.id,
-                text="Invalid amount entered. Please enter a numeric value in euros (e.g., 5 for €5). \n\n Press the back button to return to top-up options",
-                reply_markup=InlineKeyboardMarkup(keyboard)
+                text="*Invalid amount* entered. Please enter a *numeric* value in *euros* (e.g., 5 for €5). \n\n Press the *back button* to return to *top-up options*",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+                parse_mode='Markdown'
             )
             return
 
