@@ -668,16 +668,16 @@ async def admin_command(update: Update, context: CallbackContext):
     admin_commands = [
         "",
         "`/admin` - List available admin commands",
-        "/get_user_count - Get the number of users",
-        "/list_user_roles - List users and their role",
-        "/change_role works even if youre not currently admin role",
+        "`/get_user_count` - Get the number of users",
+        "`/list_user_roles` - List users and their role",
+        "`/change_role` - works even if youre not currently admin role",
         "",
         "Messaging commands:",
         "",
-        "/send_message_to_id <user_id> <message> ",
-        "/message_username <user_username> <message",
-        "/message_name <user_first_name> <message>",
-        "/message_role <user_role> <message>"
+        "`/send_message_to_id` <user_id> <message> ",
+        "`/message_username` <user_username> <message",
+        "`/message_name` <user_first_name> <message>",
+        "`/message_role` <user_role> <message>"
         # Add more admin commands here
     ]
     commands_text = "\n".join(admin_commands)
