@@ -19,21 +19,22 @@ model_pricing: # per 1k tokens, regularly update from openAI's pricing page to b
   gpt-3.5-turbo: 0.003  
   gpt-3.5-turbo-16k: 0.0035 
   gpt-4-1106-preview: 0.04
-  gpt-4-vision-preview: 0.04  
+  gpt-4-vision-preview: 0.04
+  gpt-4-turbo-2024-04-09: 0.04  
   gpt-4: 0.12  
   text-davinci-003: 0.006  
   dalle-2: 0.020 #per image
   whisper: 0.008 #per minute
 
-persona_deduction_rates:
+role_deduction_rates:
   admin: 0
   beta_tester: 1.05
   friend: 0
   regular_user: 1.1
   trial_user: 1
 
-personas:
-  admin: []
+roles:
+  admin: [] #add your id here (can be found in the database)
   beta_tester: [] 
   friend: [] 
   regular_user: []

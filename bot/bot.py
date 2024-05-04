@@ -667,7 +667,7 @@ async def admin_command(update: Update, context: CallbackContext):
     # List of admin commands
     admin_commands = [
         "",
-        "/admin - List available admin commands",
+        "`/admin` - List available admin commands",
         "/get_user_count - Get the number of users",
         "/list_user_roles - List users and their role",
         "/change_role works even if youre not currently admin role",
@@ -681,7 +681,7 @@ async def admin_command(update: Update, context: CallbackContext):
         # Add more admin commands here
     ]
     commands_text = "\n".join(admin_commands)
-    await update.message.reply_text(f"Available admin commands:\n{commands_text}")
+    await update.message.reply_text(f"Available admin commands:\n{commands_text}", parse_mode='Markdown')
 
 async def get_user_count(update, context):
     user_id = update.effective_user.id
@@ -703,7 +703,7 @@ async def list_user_roles(update, context):
 
     users_and_roles = db.get_users_and_roles()  
     message_lines = [
-        f"`{user.get('username', 'No Username')}` | `{user.get('first_name', 'No First Name')}` | `{user.get('role', 'No Persona')}`" 
+        f"`{user.get('username', 'No Username')}` | `{user.get('first_name', 'No First Name')}` | `{user.get('role', 'No Role')}`" 
         for user in users_and_roles
     ]
     message_text = "\n\n".join(message_lines)
