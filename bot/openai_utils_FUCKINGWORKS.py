@@ -6,13 +6,13 @@ import logging
 import tiktoken
 import openai
 
-import json #logging error
 
 # setup openai
 openai.api_key = config.openai_api_key
 if config.openai_api_base is not None:
     openai.api_base = config.openai_api_base
 logger = logging.getLogger(__name__)
+
 
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.7,
@@ -22,19 +22,11 @@ OPENAI_COMPLETION_OPTIONS = {
     "presence_penalty": 0,
     "request_timeout": 60.0,
 }
-#GPT HELP 2
-def validate_payload(payload): #maybe comment out
-    # Example validation: Ensure all messages have content that is a string
-    for message in payload.get("messages", []):
-        if not isinstance(message.get("content"), str):
-            logger.error("Invalid message content: Not a string")
-            raise ValueError("Message content must be a string")
-#GPT HELP 2
-        
+
 
 class ChatGPT:
-    def __init__(self, model="gpt-4-1106-preview"):
-        assert model in {"text-davinci-003", "gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09"}, f"Unknown model: {model}"
+    def __init__(self, model="gpt-3.5-turbo"):
+        assert model in {"text-davinci-003", "gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview"}, f"Unknown model: {model}"
         self.model = model
 
     async def send_message(self, message, dialog_messages=[], chat_mode="assistant"):
@@ -45,15 +37,9 @@ class ChatGPT:
         answer = None
         while answer is None:
             try:
-                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09"}:
+                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview"}:
                     messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
-                    #GPT HELP 2
-                    validate_payload({
-                        "model": self.model,
-                        "messages": messages,
-                        **OPENAI_COMPLETION_OPTIONS
-                    })
-                    #GPT HELP 2
+
                     r = await openai.ChatCompletion.acreate(
                         model=self.model,
                         messages=messages,
@@ -62,15 +48,6 @@ class ChatGPT:
                     answer = r.choices[0].message["content"]
                 elif self.model == "text-davinci-003":
                     prompt = self._generate_prompt(message, dialog_messages, chat_mode)
-
-                    #GPT HELP 2
-                    validate_payload({
-                        "model": self.model,
-                        "messages": messages,
-                        **OPENAI_COMPLETION_OPTIONS
-                    })
-                    #GPT HELP 2
-
                     r = await openai.Completion.acreate(
                         engine=self.model,
                         prompt=prompt,
@@ -101,9 +78,9 @@ class ChatGPT:
         answer = None
         while answer is None:
             try:
-                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-turbo-2024-04-09"}:
+                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview"}:
                     messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
-                    
+
                     r_gen = await openai.ChatCompletion.acreate(
                         model=self.model,
                         messages=messages,
@@ -118,10 +95,11 @@ class ChatGPT:
                         if "content" in delta:
                             answer += delta.content
                             n_input_tokens, n_output_tokens = self._count_tokens_from_messages(messages, answer, model=self.model)
-                            n_first_dialog_messages_removed = 0  #n_dialog_messages_before - len(dialog_messages) #repo commit
+                            n_first_dialog_messages_removed = 0
 
                             yield "not_finished", answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed
                             
+
                 elif self.model == "text-davinci-003":
                     prompt = self._generate_prompt(message, dialog_messages, chat_mode)
                     r_gen = await openai.Completion.acreate(
@@ -251,8 +229,6 @@ class ChatGPT:
             n_input_tokens,
             n_output_tokens,
         ), n_first_dialog_messages_removed
-    
-
 
     def _generate_prompt(self, message, dialog_messages, chat_mode):
         prompt = config.chat_modes[chat_mode]["prompt_start"]
@@ -277,13 +253,12 @@ class ChatGPT:
     def _generate_prompt_messages(self, message, dialog_messages, chat_mode, image_buffer: BytesIO = None):
         prompt = config.chat_modes[chat_mode]["prompt_start"]
 
-        #messages = [{"role": "system", "content": config.chat_modes[chat_mode]["prompt_start"]}]
-        messages = [{"role": "system", "content": prompt}] #repo commit
-
+        messages = [{"role": "system", "content": prompt}]
+        
         for dialog_message in dialog_messages:
             messages.append({"role": "user", "content": dialog_message["user"]})
             messages.append({"role": "assistant", "content": dialog_message["bot"]})
-
+                    
         if image_buffer is not None:
             messages.append(
                 {
@@ -310,7 +285,7 @@ class ChatGPT:
         answer = answer.strip()
         return answer
 
-    def _count_tokens_from_messages(self, messages, answer, model="gpt-4-1106-preview"):
+    def _count_tokens_from_messages(self, messages, answer, model="gpt-3.5-turbo"):
         encoding = tiktoken.encoding_for_model(model)
 
         if model == "gpt-3.5-turbo-16k":
@@ -328,13 +303,9 @@ class ChatGPT:
         elif model == "gpt-4-vision-preview":
             tokens_per_message = 3
             tokens_per_name = 1
-        elif model == "gpt-4-turbo-2024-04-09":
-            tokens_per_message = 3
-            tokens_per_name = 1
         else:
             raise ValueError(f"Unknown model: {model}")
 
-        # input
         # input
         n_input_tokens = 0
         for message in messages:

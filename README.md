@@ -18,10 +18,10 @@ This repo is ChatGPT re-created as Telegram Bot, and its 95% ready for you to de
 
 You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot)
 
-## Original features
+## Original features when I started the fork (02.02.2024)
 - Low latency replies (it usually takes about 3-5 seconds)
 - No request limits
-- GPT-4 and GPT-4 Turbo support
+- GPT-4 and support
 - Group Chat support (/help_group_chat to get instructions)
 - DALLE 2 (choose 👩‍🎨 Artist mode to generate images)
 - Voice message recognition
@@ -33,12 +33,16 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 ## What I added
 - <b>16 new chat modes</b>: Cyber Dud (⌐■_■),  💻🟧 Grimoire (Advanced coding assitant), 🖥️ Bash dud (Linux Terminal), 🦆 Duck Mode, and a bunch of characters from movies and shows!
 
+- <b>GPT-4 Vision</b> is finally fully integrated and supported (inspiration taken from multiple places as I had issues)
+
 - <b>Improved</b> start and help messages
 
 - <b>Improved</b> the <b>settings</b> and <b>balance</b> menus, theyre now more user friendly and clean
   
 - Payment system using Stripe, updating user balance automatically after payment (redis listener needs to be configured)
   
+- Special donation button
+
 - Different user roles: <b>admin</b>, <b>beta tester</b>, <b>friend</b>, <b>regular user</b>, <b>trial user</b>
     - All new users start as a trial user with 1 euro balance, and are automatically upgraded to regular user after first payment
     - Special admin-only commands that can be used directly from the telegram app
@@ -54,8 +58,7 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 
 ---
 
-## News
-- GPT-4 Vision <b>coming soon</b>
+## Upcoming
 - Selectable DALL-E models <b>coming soon</b>
 
 

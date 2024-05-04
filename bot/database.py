@@ -51,9 +51,11 @@ class Database:
 
             "n_generated_images": 0,
             "n_transcribed_seconds": 0.0,  # voice message transcription
-            "token_balance": 1000,  # Initialize token balance for new users
-            "persona": "trial_user",
-            "euro_balance": 1
+            "token_balance": 100000,  # Initialize token balance for new users
+            "role": "trial_user",
+            "euro_balance": 1,
+            "total_topup": 0,
+            "total_donated": 0
         }
 
         if not self.check_if_user_exists(user_id):
@@ -137,33 +139,33 @@ class Database:
         return user.get("token_balance", 0)
 
 
-    def deduct_tokens_based_on_persona(self, user_id: int, n_input_tokens: int, n_output_tokens: int):
+    def deduct_tokens_based_on_role(self, user_id: int, n_input_tokens: int, n_output_tokens: int):
         user = self.user_collection.find_one({"_id": user_id})
-        persona = user.get("persona", "Trial_User")  # Default to Trial_User if not set
-        deduction_rate = config.persona_deduction_rates.get(persona, 1)  # Use the rates from config.py
+        role = user.get("role", "Trial_User")  # Default to Trial_User if not set
+        deduction_rate = config.role_deduction_rates.get(role, 1)  # Use the rates from config.py
         tokens_to_deduct = (n_input_tokens + n_output_tokens) * deduction_rate
         self.user_collection.update_one(
             {"_id": user_id},
             {"$inc": {"token_balance": -tokens_to_deduct}}
         )
 
-    def get_user_persona(self, user_id: int) -> str:
-        """Determine the persona of a user based on their user ID."""
+    def get_user_role(self, user_id: int) -> str:
+        """Determine the role of a user based on their user ID."""
         user = self.user_collection.find_one({"_id": user_id})
-        if user and "persona" in user:
-            return user["persona"]
-        return "Trial_User"  # Default persona if not explicitly set
+        if user and "role" in user:
+            return user["role"]
+        return "Trial_User"  # Default role if not explicitly set
 
     def get_user_count(self):
         return self.user_collection.count_documents({})
     
-    def get_users_and_personas(self):
-    # Fetch all users and project only the first_name and persona
-        users_cursor = self.user_collection.find({}, {"username": 1,"first_name": 1, "persona": 1})
+    def get_users_and_roles(self):
+    # Fetch all users and project only the first_name and role
+        users_cursor = self.user_collection.find({}, {"username": 1,"first_name": 1, "role": 1})
         return list(users_cursor)
     
-    def find_users_by_persona(self, persona: str):
-        return list(self.user_collection.find({"persona": persona}))
+    def find_users_by_role(self, role: str):
+        return list(self.user_collection.find({"role": role}))
 
     def find_user_by_username(self, username: str):
         return self.user_collection.find_one({"username": username})
@@ -194,10 +196,10 @@ class Database:
         )
 
     def deduct_cost_for_action(self, user_id: int, action_type: str, action_params: dict):
-        user_persona = self.get_user_persona(user_id)
-        deduction_rate = config.persona_deduction_rates.get(user_persona, 1)
+        user_role = self.get_user_role(user_id)
+        deduction_rate = config.role_deduction_rates.get(user_role, 1)
 
-        if action_type in ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-1106-preview', 'gpt-4-vision-preview', 'text-davinci-003']:
+        if action_type in ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-1106-preview', 'gpt-4-vision-preview', 'text-davinci-003', 'gpt-4-turbo-2024-04-09']:
             # For text models, price is per 1000 tokens
             total_tokens = action_params.get('n_input_tokens', 0) + action_params.get('n_output_tokens', 0)
             adjusted_tokens = total_tokens * deduction_rate

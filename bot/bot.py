@@ -76,14 +76,14 @@ To get a reply from the bot in the chat – @ <b>tag</b> it or <b>reply</b> to i
 For example: "{bot_username} write a poem about Telegram"
 """
 
-def update_user_personas_from_config(db, personas):
-    for persona, user_ids in personas.items():
+def update_user_roles_from_config(db, roles):
+    for role, user_ids in roles.items():
         for user_id in user_ids:
             db.user_collection.update_one(
                 {"_id": user_id},
-                {"$set": {"persona": persona}}
+                {"$set": {"role": role}}
             )
-    print("User personas updated from config.")
+    print("User roles updated from config.")
 
 
 def split_text_into_chunks(text, chunk_size):
@@ -115,7 +115,7 @@ async def register_user_if_not_exists(update: Update, context: CallbackContext, 
     n_used_tokens = db.get_user_attribute(user.id, "n_used_tokens")
     if isinstance(n_used_tokens, int) or isinstance(n_used_tokens, float):  # old format
         new_n_used_tokens = {
-            "gpt-3.5-turbo": {
+            "gpt-4-1106-preview": {
                 "n_input_tokens": 0,
                 "n_output_tokens": n_used_tokens
             }
@@ -192,9 +192,9 @@ async def help_group_chat_handle(update: Update, context: CallbackContext):
 async def token_balance_preprocessor(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     current_balance = db.check_token_balance(user_id)
-    user_persona = db.get_user_persona(user_id)
+    user_role = db.get_user_role(user_id)
 
-    if user_persona == "admin":
+    if user_role == "admin":
         return True
 
     if db.check_token_balance(user_id) < 10:  # Number of minimum tokens needed
@@ -233,7 +233,7 @@ async def retry_handle(update: Update, context: CallbackContext):
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
-    
+    #for tokens
     #if not await token_balance_preprocessor(update, context):
         #return
     if not await euro_balance_preprocessor(update, context):
@@ -244,8 +244,6 @@ async def retry_handle(update: Update, context: CallbackContext):
         await update.message.reply_text("No message to retry 🤷‍♂️")
         return
 
-    #deduction test
-    #db.deduct_tokens(user_id, 1)
 
     last_dialog_message = dialog_messages.pop()
     db.set_dialog_messages(user_id, dialog_messages, dialog_id=None)  # last message was removed from the context
@@ -258,15 +256,15 @@ async def retry_handle(update: Update, context: CallbackContext):
 #            chat_mode=db.get_user_attribute(user_id, "current_chat_mode")
 #        )
 #        # Deduct tokens based on the tokens used for the query and response
-#        #db.deduct_tokens_based_on_persona(user_id, n_input_tokens, n_output_tokens)
+#        #db.deduct_tokens_based_on_role(user_id, n_input_tokens, n_output_tokens)
 #
 #        action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
 #        db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens})  
 #       
 #        # Now handle the response as needed, e.g., sending it back to the user
 #        #await update.message.reply_text(answer)
-#    except Exception as e:
-#        await update.message.reply_text(f"Error retrying message: {str(e)}")
+#        except Exception as e:
+#            await update.message.reply_text(f"Error retrying message: {str(e)}")
 
 #    action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
 #    db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens})
@@ -294,7 +292,7 @@ async def _vision_message_handle_fn(
 
     if current_model != "gpt-4-vision-preview":
         await update.message.reply_text(
-            "🥲 Images processing is only available for <b>gpt-4-vision-preview</b> model. Please change your settings in /settings",
+            "🥲 Images processing is only available for the <b>GPT-4 Vision</b> model. Please change your settings in /settings",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -414,38 +412,10 @@ async def _vision_message_handle_fn(
                     ]
                 , "bot": answer, "date": datetime.now()}
 
-        #GPT HELP
-
-
-#            new_dialog_message = {
-#                "user": {
-#                    "text": message,
-#                    "image": base_image  # Include base64 image string directly in the API payload
-#                },
-#                "bot": answer,  # This would typically be the response from the model or your system
-#                "date": datetime.now()
-#            }
-#            def prepare_message_for_external_systems(text_message, image_data=None):
-#                if image_data:
-#            # If external systems require a specific format, create that format here
-#                    return f"{text_message} [image data attached]"
-#                else:
-#                    return text_message
-#                
-#            prepared_message = prepare_message_for_external_systems(message, True)
-#
-#
-#           new_dialog_message = {
-#                "user": prepare_message_for_external_systems(prepared_message, base_image if 'buf' is not None else None),
-#                "bot": answer,
-#                "date": datetime.now()
-#            }
-#
-        #GPT HELP
 
         else:
-            #new_dialog_message = {"user": [{"type": "text", "text": message}], "bot": answer, "date": datetime.now()}
-            new_dialog_message = {"user": message, "bot": answer, "date": datetime.now()}#the test this works
+            new_dialog_message = {"user": [{"type": "text", "text": message}], "bot": answer, "date": datetime.now()} #repo
+            #new_dialog_message = {"user": message, "bot": answer, "date": datetime.now()}#the test this works
             #HERE IS THE ISSUE
         
         db.set_dialog_messages(
@@ -455,6 +425,9 @@ async def _vision_message_handle_fn(
         )
 
         db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
+
+        action_type = db.get_user_attribute(user_id, "current_model") 
+        db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens}) 
 
     except asyncio.CancelledError:
         # note: intermediate token updates only work when enable_message_streaming=True (config.yml)
@@ -467,207 +440,6 @@ async def _vision_message_handle_fn(
         await update.message.reply_text(error_text)
         return
 
-async def _vision_message_handle_fn_OLDDDDDD(
-    update: Update, context: CallbackContext, use_new_dialog_timeout: bool = True
-):
-    logger.info('_vision_message_handle_fn')
-    user_id = update.message.from_user.id
-    current_model = db.get_user_attribute(user_id, "current_model")
-
-    if current_model != "gpt-4-vision-preview":
-        await update.message.reply_text(
-            "🥲 Images processing is only available for <b>gpt-4-vision-preview</b> model. Please change your settings in /settings",
-            parse_mode=ParseMode.HTML,
-        )
-        return
-
-    chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
-
-    # new dialog timeout
-    # Handle dialog timeout for starting a new conversation
-    if use_new_dialog_timeout:
-        if (datetime.now() - db.get_user_attribute(user_id, "last_interaction")).seconds > config.new_dialog_timeout and len(db.get_dialog_messages(user_id)) > 0:
-            db.start_new_dialog(user_id)
-            await update.message.reply_text(f"Starting new dialog due to timeout (<b>{config.chat_modes[chat_mode]['name']}</b> mode) ✅", parse_mode=ParseMode.HTML)
-
-    
-    db.set_user_attribute(user_id, "last_interaction", datetime.now())
-
-    buf = None
-    if update.message.effective_attachment:
-
-        photo = update.message.effective_attachment[-1]
-        photo_file = await context.bot.get_file(photo.file_id)
-
-        # store file in memory, not on disk
-        buf = io.BytesIO()
-        try:
-            await photo_file.download_to_memory(buf)
-            buf.name = "image.jpg"  # file extension is required
-            buf.seek(0)  # move cursor to the beginning of the buffer
-            logger.debug("Downloaded image buffer length: %s", len(buf.getvalue()))
-
-        # Check if buffer has data before proceeding
-            if buf.getvalue():
-                logger.debug("Buffer size before API call: %d bytes", len(buf.getvalue()))
-                logger.debug("Buffer content snippet for debugging: %s", buf.getvalue()[:50])
-                  # log the first 50 bytes
-                logger.debug("Image buffer is ready for processing.")
-            # Proceed to process the image buffer
-            # For example, pass the buffer to a function that handles image processing
-            else:
-                logger.error("Image buffer is empty. Cannot proceed with image processing.")
-            return
-        except Exception as e:
-            logger.error("Failed to process image: %s", str(e))
-            return
-
-    else:
-        logger.debug("No image received in the message.")
-        # If there's no image and it's necessary, handle this case accordingly
-
-    message = update.message.caption or update.message.text or ''
-    dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
-    chatgpt_instance = openai_utils.ChatGPT(model=current_model)
-    if buf is not None and buf.getvalue():
-    # encode and send with image data
-        encoded_image = chatgpt_instance._encode_image(buf)
-        payload = {
-            "image": encoded_image,
-            "text": message
-        }
-    else:
-    # prepare to send text only
-        payload = {
-        "text": message
-    }
-
-    # send placeholder message to user
-    
-    message = update.message.caption or update.message.text or ''
-    dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
-    chatgpt_instance = openai_utils.ChatGPT(model=current_model)
-
-
-    logger.debug(f"User message: {message}")
-    logger.debug(f"Image buffer present: {'Yes' if buf else 'No'}")
-    logger.debug(f"Dialog messages: {json.dumps(dialog_messages, cls=CustomEncoder)}")
-
-
-    placeholder_message = await update.message.reply_text("<i>Making stuff up...</i>", parse_mode=ParseMode.HTML)
-    await update.message.chat.send_action(action="typing")
-    
-    parse_mode = {"html": ParseMode.HTML, "markdown": ParseMode.MARKDOWN}[
-            config.chat_modes[chat_mode]["parse_mode"]
-        ]
-
-    # in case of CancelledError
-    n_input_tokens, n_output_tokens = 0, 0
-
-    
-    try:
-        
-        if config.enable_message_streaming:
-            gen = chatgpt_instance.send_vision_message_stream(
-                message,
-                dialog_messages=dialog_messages,
-                image_buffer=buf,
-                chat_mode=chat_mode,
-            )
-        else:
-            (
-                answer,
-                (n_input_tokens, n_output_tokens),
-                n_first_dialog_messages_removed,
-            ) = await chatgpt_instance.send_vision_message(
-                message,
-                dialog_messages=dialog_messages,
-                image_buffer=buf,
-                chat_mode=chat_mode,
-            )
-
-            async def fake_gen():
-                yield "finished", answer, (
-                    n_input_tokens,
-                    n_output_tokens,
-                ), n_first_dialog_messages_removed
-
-            gen = fake_gen()
-
-        prev_answer = ""
-        async for gen_item in gen:
-            (
-                status,
-                answer,
-                (n_input_tokens, n_output_tokens),
-                n_first_dialog_messages_removed,
-            ) = gen_item
-            logger.debug(f"Generated answer: {answer}")
-            answer = answer[:4096]  # telegram message limit
-
-            # update only when 100 new symbols are ready
-            if abs(len(answer) - len(prev_answer)) < 100 and status != "finished":
-                continue
-
-            try:
-                await context.bot.edit_message_text(
-                    answer,
-                    chat_id=placeholder_message.chat_id,
-                    message_id=placeholder_message.message_id,
-                    parse_mode=parse_mode,
-                )
-            except telegram.error.BadRequest as e:
-                if str(e).startswith("Message is not modified"):
-                    continue
-                else:
-                    await context.bot.edit_message_text(
-                        answer,
-                        chat_id=placeholder_message.chat_id,
-                        message_id=placeholder_message.message_id,
-                    )
-
-            await asyncio.sleep(0.01)  # wait a bit to avoid flooding
-
-            prev_answer = answer
-
-        # update user data
-        logger.debug(f"Preparing to send message: {message} with dialog: {dialog_messages}")
-        if buf is not None:
-            logger.debug(f"Image data is present. Size: {len(buf.getvalue())} bytes")
-            base_image = base64.b64encode(buf.getvalue()).decode("utf-8")
-            new_dialog_message = {"user": [
-                        {
-                            "type": "text",
-                            "text": message,
-                        },
-                        {
-                            "type": "image",
-                            "image": base_image,
-                        }
-                    ]
-                , "bot": answer, "date": datetime.now()}
-        else:
-            new_dialog_message = {"user": [{"type": "text", "text": message}], "bot": answer, "date": datetime.now()}
-        
-        db.set_dialog_messages(
-            user_id,
-            db.get_dialog_messages(user_id, dialog_id=None) + [new_dialog_message],
-            dialog_id=None
-        )
-
-        db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
-
-    except asyncio.CancelledError:
-        # note: intermediate token updates only work when enable_message_streaming=True (config.yml)
-        db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
-        raise
-
-    except Exception as e:
-        error_text = f"Something went wrong during completion FOR VISION. Reason: {e}"
-        logger.error(error_text)
-        await update.message.reply_text(error_text)
-        return
-
 async def unsupport_message_handle(update: Update, context: CallbackContext, message=None):
     error_text = f"I don't know how to read files or videos. Send the picture in normal mode (Quick Mode)."
     logger.error(error_text)
@@ -675,14 +447,14 @@ async def unsupport_message_handle(update: Update, context: CallbackContext, mes
     return
 
 #custom commands
-async def show_user_persona(update: Update, context: CallbackContext):
+async def show_user_role(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    # Fetch the user's persona from the database
-    user_persona = db.get_user_persona(user_id)
+    # Fetch the user's role from the database
+    user_role = db.get_user_role(user_id)
 
     # Send a message to the user with their role
-    await update.message.reply_text(f"Your current role is ~ `{user_persona}` ~  \n\n Pretty neat huh?", parse_mode='Markdown')
+    await update.message.reply_text(f"Your current role is ~ `{user_role}` ~  \n\n Pretty neat huh?", parse_mode='Markdown')
 
 async def token_balance_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -716,7 +488,7 @@ async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
     # Send message with euro amount options
     await context.bot.send_message(
         chat_id=user_id,
-        text="Currently supported payment methods: *Card*, *GooglePay*, *PayPal*, *iDeal*.\n\nPlease select the *amount* you wish to add to your *balance*:\n\n", #topup 1.25 message
+        text="Currently supported payment methods: *Card*, *GooglePay*, *PayPal*, *iDeal*.\n\n For *GPT-4*, 1 euro gives you *75,000* words, or *200 A4 pages*!\nFor *GPT-3.5*, its almost *20 times cheaper*. \n\nPlease select the *amount* you wish to add to your *balance*:\n\n", #topup 1.25 message
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
@@ -841,10 +613,10 @@ async def send_confirmation_message_async(user_id, euro_amount, is_donation):
             
         else:
             message = f"Your top-up of *€{euro_amount:.2f}* was *successful!*🎉 \n\nYour new balance will be updated shortly."
-            if user.get("persona") == "trial_user":
+            if user.get("role") == "trial_user":
                 db.user_collection.update_one(
                     {"_id": user_id},
-                    {"$set": {"persona": "regular_user"}}
+                    {"$set": {"role": "regular_user"}}
                 )
                 message += "\n\nYou have been upgraded to the role of *regular user*! Thank you *so much* for supporting this project, you're *amazing*! ❤️"
 
@@ -885,10 +657,10 @@ async def start_redis_listener():
 async def admin_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    # Check if the user has an admin persona
-    user_persona = db.get_user_persona(user_id)
+    # Check if the user has an admin role
+    user_role = db.get_user_role(user_id)
 
-    if user_persona != "admin":
+    if user_role != "admin":
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
@@ -897,15 +669,15 @@ async def admin_command(update: Update, context: CallbackContext):
         "",
         "/admin - List available admin commands",
         "/get_user_count - Get the number of users",
-        "/list_user_personas - List users and their persona",
-        "/change_persona works even if youre not currently admin role",
+        "/list_user_roles - List users and their role",
+        "/change_role works even if youre not currently admin role",
         "",
         "Messaging commands:",
         "",
         "/send_message_to_id <user_id> <message> ",
         "/message_username <user_username> <message",
         "/message_name <user_first_name> <message>",
-        "/message_persona <user_persona> <message>"
+        "/message_role <user_role> <message>"
         # Add more admin commands here
     ]
     commands_text = "\n".join(admin_commands)
@@ -914,25 +686,25 @@ async def admin_command(update: Update, context: CallbackContext):
 async def get_user_count(update, context):
     user_id = update.effective_user.id
 
-    if db.get_user_persona(user_id) != "admin":
+    if db.get_user_role(user_id) != "admin":
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
     user_count = db.get_user_count()  
     await update.message.reply_text(f"Total number of users: {user_count}")
 
-async def list_user_personas(update, context):
+async def list_user_roles(update, context):
     user_id = update.effective_user.id
 
-    # Check if the user has the admin persona
-    if db.get_user_persona(user_id) != "admin":
+    # Check if the user has the admin role
+    if db.get_user_role(user_id) != "admin":
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
-    users_and_personas = db.get_users_and_personas()  
+    users_and_roles = db.get_users_and_roles()  
     message_lines = [
-        f"`{user.get('username', 'No Username')}` | `{user.get('first_name', 'No First Name')}` | `{user.get('persona', 'No Persona')}`" 
-        for user in users_and_personas
+        f"`{user.get('username', 'No Username')}` | `{user.get('first_name', 'No First Name')}` | `{user.get('role', 'No Persona')}`" 
+        for user in users_and_roles
     ]
     message_text = "\n\n".join(message_lines)
 
@@ -941,8 +713,8 @@ async def list_user_personas(update, context):
 async def send_message_to_id(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    # Check if the user has the admin persona
-    if db.get_user_persona(user_id) != "admin":
+    # Check if the user has the admin role
+    if db.get_user_role(user_id) != "admin":
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
@@ -965,8 +737,8 @@ async def send_message_to_id(update: Update, context: CallbackContext):
 async def send_message_to_username(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    # Check if the user has the admin persona
-    if db.get_user_persona(user_id) != "admin":
+    # Check if the user has the admin role
+    if db.get_user_role(user_id) != "admin":
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
@@ -993,7 +765,7 @@ async def send_message_to_username(update: Update, context: CallbackContext):
 async def send_message_to_name(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    if db.get_user_persona(user_id) != "admin":
+    if db.get_user_role(user_id) != "admin":
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
@@ -1019,25 +791,25 @@ async def send_message_to_name(update: Update, context: CallbackContext):
             continue
     await update.message.reply_text(f"Message sent to users with the first name {first_name}.")
 
-async def send_message_to_persona(update: Update, context: CallbackContext):
+async def send_message_to_role(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    # Check if the user has the admin persona
-    if db.get_user_persona(user_id) != "admin":
+    # Check if the user has the admin role
+    if db.get_user_role(user_id) != "admin":
         await update.message.reply_text("You do not have permission to use this command.")
         return
 
     try:
-        _, persona, *message_parts = update.message.text.split()
+        _, role, *message_parts = update.message.text.split()
         message_text = " ".join(message_parts)
     except ValueError:
-        await update.message.reply_text("Usage: /send_message_to_persona <persona> <message>")
+        await update.message.reply_text("Usage: /send_message_to_role <role> <message>")
         return
 
-    # Find users by persona
-    users = db.find_users_by_persona(persona)
+    # Find users by role
+    users = db.find_users_by_role(role)
     if not users:
-        await update.message.reply_text(f"No users found with the persona {persona}.")
+        await update.message.reply_text(f"No users found with the role {role}.")
         return
 
     # Send message to each user
@@ -1047,66 +819,66 @@ async def send_message_to_persona(update: Update, context: CallbackContext):
         except Exception as e:
             # Log or handle individual send errors
             continue
-    await update.message.reply_text(f"Message sent to users with the persona {persona}.")
+    await update.message.reply_text(f"Message sent to users with the role {role}.")
 
-async def change_persona(update: Update, context: CallbackContext):
+async def change_role(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    # Assuming 'personas' is a dictionary in your config with user roles and their corresponding user IDs
-    if user_id not in config.personas['admin']:
+    # Assuming 'roles' is a dictionary in your config with user roles and their corresponding user IDs
+    if user_id not in config.roles['admin']:
         await update.message.reply_text("You're not allowed to use this command.")
         return
 
-    # Fetch the current user's persona
+    # Fetch the current user's role
     user_data = db.user_collection.find_one({"_id": user_id})
-    current_persona = user_data.get("persona", "No persona set") if user_data else "No user data found"
+    current_role = user_data.get("role", "No role set") if user_data else "No user data found"
 
-    # Define available personas
-    personas = ["admin", "beta_tester", "friend",  "regular_user", "trial_user"]
+    # Define available roles
+    roles = ["admin", "beta_tester", "friend",  "regular_user", "trial_user"]
 
-    # Generate buttons for each persona, marking the current persona with a checkmark
+    # Generate buttons for each role, marking the current role with a checkmark
     keyboard = [
-        [InlineKeyboardButton(f"{persona} {'✅' if persona == current_persona else ''}", callback_data=f"set_persona|{persona}")]
-        for persona in personas
+        [InlineKeyboardButton(f"{role} {'✅' if role == current_role else ''}", callback_data=f"set_role|{role}")]
+        for role in roles
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Send message with persona options
+    # Send message with role options
     await update.message.reply_text(
-        "Please choose a persona to switch to:",
+        "Please choose a role to switch to:",
         reply_markup=reply_markup
     )
 
 
-async def handle_persona_change(update: Update, context: CallbackContext):
+async def handle_role_change(update: Update, context: CallbackContext):
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
     data = query.data
 
-    if data.startswith('set_persona|'):
-        new_persona = data.split('|')[1]
+    if data.startswith('set_role|'):
+        new_role = data.split('|')[1]
         
-        # Update the user's persona in the database
+        # Update the user's role in the database
         db.user_collection.update_one(
             {"_id": user_id},
-            {"$set": {"persona": new_persona}}
+            {"$set": {"role": new_role}}
         )
         
-        # Fetch the updated persona list with the current persona now being the new_persona
-        personas = ["admin", "beta_tester", "friend",  "regular_user", "trial_user"]
+        # Fetch the updated role list with the current role now being the new_role
+        roles = ["admin", "beta_tester", "friend",  "regular_user", "trial_user"]
         
         # Regenerate keyboard with updated checkmark
         keyboard = [
-            [InlineKeyboardButton(f"{persona} {'✅' if persona == new_persona else ''}", callback_data=f"set_persona|{persona}")]
-            for persona in personas
+            [InlineKeyboardButton(f"{role} {'✅' if role == new_role else ''}", callback_data=f"set_role|{role}")]
+            for role in roles
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         # Update the message with the new keyboard
         await query.edit_message_text(
-            text="Please choose a persona to switch to:",
+            text="Please choose a role to switch to:",
             reply_markup=reply_markup
         )
 
@@ -1123,17 +895,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
     # check if message is edited
     if update.edited_message is not None:
         await edited_message_handle(update, context)
-        return
-
-    #vision test
-#    buf = None
-#    if update.message.photo:
-#        # Get the highest resolution photo
-#        photo = update.message.photo[-1]
-#        photo_file = await context.bot.get_file(photo.file_id)
-#        buf = io.BytesIO()
-#        await photo_file.download_to_memory(buf)
-#        buf.seek(0)  # Rewind buffer to the start after downloading    
+        return  
 
 #    _message = message if message is not None else (update.message.caption or update.message.text or '') 
 
@@ -1159,17 +921,6 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
 
     current_model = db.get_user_attribute(user_id, "current_model")
 
-    #vision test
-    #dialog_messages = db.get_dialog_messages(user_id, dialog_id=None)
-#    try:
-#        # Assume send_message can handle text and optional image buffer
-#        answer, (n_input_tokens, n_output_tokens), _ = await openai_utils.send_message(
-#            message=_message,
-#            dialog_messages=dialog_messages,
-#            chat_mode=db.get_user_attribute(user_id, "current_chat_mode"),
-#            image_buffer=buf if buf else None
-#        )
-#vision test
 
     #custom top up
     if 'awaiting_custom_topup' in context.user_data and context.user_data['awaiting_custom_topup']:
@@ -1322,8 +1073,8 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                 prev_answer = answer
 
             # update user data
-            new_dialog_message = {"user": _message, "bot": answer, "date": datetime.now()} #this still works
-            #new_dialog_message = {"user": [{"type": "text", "text": _message}], "bot": answer, "date": datetime.now()} #repo commit
+            #new_dialog_message = {"user": _message, "bot": answer, "date": datetime.now()} #this still works
+            new_dialog_message = {"user": [{"type": "text", "text": _message}], "bot": answer, "date": datetime.now()} #repo commit
             #HERE IS THE ISSUE
 
             db.set_dialog_messages(
@@ -1332,7 +1083,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                 dialog_id=None
             )
             #untested here
-            #db.deduct_tokens_based_on_persona(user_id, n_input_tokens, n_output_tokens)
+            
         
             action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model #repo commit #maybe comment this out
             db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens}) 
@@ -1342,7 +1093,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         except asyncio.CancelledError:
             # note: intermediate token updates only work when enable_message_streaming=True (config.yml)
             db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
-            #db.deduct_tokens_based_on_persona(user_id, n_input_tokens, n_output_tokens)
+            #db.deduct_tokens_based_on_role(user_id, n_input_tokens, n_output_tokens)
 
             action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model #maybe comment this out
             db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens}) 
@@ -1373,7 +1124,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             logger.error('gpt-4-vision-preview')
             if current_model != "gpt-4-vision-preview":
                 current_model = "gpt-4-vision-preview"
-                db.set_user_attribute(user_id, "current_model", "gpt-4-vision-preview")
+#                db.set_user_attribute(user_id, "current_model", "gpt-4-vision-preview") #this lets you send images to any model and it changes it to vision
             task = asyncio.create_task(
                 _vision_message_handle_fn(update, context, use_new_dialog_timeout=use_new_dialog_timeout)
             )
@@ -1445,7 +1196,7 @@ async def voice_message_handle(update: Update, context: CallbackContext):
 
     # update n_transcribed_seconds
     db.set_user_attribute(user_id, "n_transcribed_seconds", voice.duration + db.get_user_attribute(user_id, "n_transcribed_seconds"))
-    #db.deduct_tokens_based_on_persona(user_id, n_input_tokens, n_output_tokens)
+    #db.deduct_tokens_based_on_role(user_id, n_input_tokens, n_output_tokens)
     action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
     db.deduct_cost_for_action(user_id=user_id, action_type='whisper', action_params={'audio_duration_minutes': audio_duration_minutes}) 
     await message_handle(update, context, message=transcribed_text)
@@ -1496,7 +1247,7 @@ async def new_dialog_handle(update: Update, context: CallbackContext):
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
-    db.set_user_attribute(user_id, "current_model", "gpt-4-1106-preview")
+#    db.set_user_attribute(user_id, "current_model", "gpt-4-1106-preview")
 
     db.start_new_dialog(user_id)
     await update.message.reply_text("Starting new dialog ✅")
@@ -1651,7 +1402,7 @@ async def display_model_info(query, user_id, context):
     
     details_text = f"{description}\n\n"
     for score_key, score_value in scores.items():
-        details_text += f"🟢{'🟢' * score_value}⚪️{'⚪️' * (5 - score_value)} – {score_key}\n"
+        details_text += f"{'🟢' * score_value}{'⚪️' * (5 - score_value)} – {score_key}\n"
     
     details_text += "\nSelect <b>model</b>:"
     
@@ -1690,7 +1441,7 @@ async def model_settings_handler(update: Update, context: CallbackContext):
 
         score_dict = config.models["info"][current_model]["scores"]
         for score_key, score_value in score_dict.items():
-            text += f"🟢{'🟢' * score_value}⚪️{'⚪️' * (5 - score_value)} – {score_key}\n"
+            text += f"{'🟢' * score_value}{'⚪️' * (5 - score_value)} – {score_key}\n"
 
         text += "\nSelect <b>model</b>:\n"
         buttons = []
@@ -1898,7 +1649,7 @@ def run_bot() -> None:
     application = ApplicationBuilder().token(config.telegram_token).build()
     bot_instance = application.bot
 
-    update_user_personas_from_config(db, config.personas)
+    update_user_roles_from_config(db, config.roles)
 
     application = (
         ApplicationBuilder()
@@ -1946,7 +1697,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(callback_show_details, pattern='^show_details$'))
     #custom commands
-    application.add_handler(CommandHandler('persona', show_user_persona))
+    application.add_handler(CommandHandler('role', show_user_role))
     application.add_handler(CommandHandler('token_balance', token_balance_command))
     application.add_handler(CommandHandler("topup", topup_handle, filters=filters.ALL))
     application.add_handler(CallbackQueryHandler(topup_callback_handle, pattern='^topup\\|'))
@@ -1955,13 +1706,13 @@ def run_bot() -> None:
     #admin commands
     application.add_handler(CommandHandler("admin", admin_command))
     application.add_handler(CommandHandler('get_user_count', get_user_count))
-    application.add_handler(CommandHandler('list_user_personas', list_user_personas))
+    application.add_handler(CommandHandler('list_user_roles', list_user_roles))
     application.add_handler(CommandHandler('message_id', send_message_to_id))
     application.add_handler(CommandHandler('message_username', send_message_to_username))
     application.add_handler(CommandHandler('message_name', send_message_to_name))
-    application.add_handler(CommandHandler('message_persona', send_message_to_persona))
-    application.add_handler(CommandHandler('change_persona', change_persona))
-    application.add_handler(CallbackQueryHandler(handle_persona_change, pattern='^set_persona\\|'))
+    application.add_handler(CommandHandler('message_role', send_message_to_role))
+    application.add_handler(CommandHandler('change_role', change_role))
+    application.add_handler(CallbackQueryHandler(handle_role_change, pattern='^set_role\\|'))
 
     application.add_error_handler(error_handle)
 

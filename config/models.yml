@@ -1,5 +1,5 @@
 #available_text_models: ["gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4", "text-davinci-003"] #Big menu
-available_text_models: ["gpt-3.5-turbo", "gpt-4-vision-preview", "gpt-4-1106-preview"] #small menu with all needed models
+available_text_models: ["gpt-3.5-turbo", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09"] #small menu with all needed models
 
 info:
   gpt-3.5-turbo:
@@ -56,7 +56,7 @@ info:
 
   gpt-4-vision-preview:
     type: chat_completion
-    name: GPT-4 Vision (Image processing not working yet)
+    name: GPT-4 Vision 
     description: Ability to <b>understand images</b>, in addition to all other GPT-4 Turbo capabilties.
 
     price_per_1000_input_tokens: 0.01
@@ -67,11 +67,11 @@ info:
       fast: 4
       cheap: 3
 
-  gpt-4-turbo-2024-04-09:
+  gpt-4-turbo-2024-04-09: #new turbo
 
     type: chat_completion
-    name: GPT FUCK NEW
-    description: FUCK ME DUDE
+    name: GPT-4 Turbo
+    description: "GPT-4 Turbo is a <b>faster</b> and <b>cheaper</b> version of GPT-4. It's as smart as GPT-4, so you should use it instead of GPT-4.\n\n This version of turbo is from 09.04.2024."
 
     price_per_1000_input_tokens: 0.01
     price_per_1000_output_tokens: 0.03
