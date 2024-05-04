@@ -100,6 +100,7 @@ async def register_user_if_not_exists(update: Update, context: CallbackContext, 
             first_name=user.first_name,
             last_name= user.last_name
         )
+        user_registered = True
         db.start_new_dialog(user.id)
 
     if db.get_user_attribute(user.id, "current_dialog_id") is None:
@@ -130,18 +131,18 @@ async def register_user_if_not_exists(update: Update, context: CallbackContext, 
     if db.get_user_attribute(user.id, "n_generated_images") is None:
         db.set_user_attribute(user.id, "n_generated_images", 0)
 
-
-    # Notify admins that a new user has just registered
-    username = user.username or "No username"
-    first_name = user.first_name or "No first name"
-    last_name = user.last_name or "No last name"
-    notification_text = f"A new user has just registered!\n\nUsername: {username}\nFirst Name: {first_name}\nLast Name: {last_name}"
-    for admin_id in config.roles['admin']:
-        try:
-            await context.bot.send_message(chat_id=admin_id, text=notification_text)
-        except Exception as e:
+    if user_registered:
+        # Notify admins that a new user has just registered
+        username = user.username or "No username"
+        first_name = user.first_name or "No first name"
+        last_name = user.last_name or "No last name"
+        notification_text = f"A new user has just registered!\n\nUsername: {username}\nFirst Name: {first_name}\nLast Name: {last_name}"
+        for admin_id in config.roles['admin']:
+            try:
+                await context.bot.send_message(chat_id=admin_id, text=notification_text)
+            except Exception as e:
             # Log the error or handle it appropriately
-            print(f"Failed to send registration to admin: {str(e)}\n\n Don't worry, this doesn't affect you in anyway!")
+                print(f"Failed to send registration to admin: {str(e)}\n\n Don't worry, this doesn't affect you in anyway!")
 
 
 async def is_bot_mentioned(update: Update, context: CallbackContext):
