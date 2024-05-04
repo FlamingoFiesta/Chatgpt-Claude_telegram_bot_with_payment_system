@@ -92,6 +92,7 @@ def split_text_into_chunks(text, chunk_size):
 
 
 async def register_user_if_not_exists(update: Update, context: CallbackContext, user: User):
+    user_registered_now = False
     if not db.check_if_user_exists(user.id):
         db.add_new_user(
             user.id,
@@ -100,7 +101,7 @@ async def register_user_if_not_exists(update: Update, context: CallbackContext, 
             first_name=user.first_name,
             last_name= user.last_name
         )
-        user_registered = True
+        user_registered_now = True
         db.start_new_dialog(user.id)
 
     if db.get_user_attribute(user.id, "current_dialog_id") is None:
@@ -131,7 +132,7 @@ async def register_user_if_not_exists(update: Update, context: CallbackContext, 
     if db.get_user_attribute(user.id, "n_generated_images") is None:
         db.set_user_attribute(user.id, "n_generated_images", 0)
 
-    if user_registered:
+    if user_registered_now:
         # Notify admins that a new user has just registered
         username = user.username or "No username"
         first_name = user.first_name or "No first name"
