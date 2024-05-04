@@ -158,6 +158,13 @@ class Database:
 
     def get_user_count(self):
         return self.user_collection.count_documents({})
+
+    def get_all_user_ids(self):
+        # Fetch all documents from the user_collection, projecting only the '_id' field
+        user_ids_cursor = self.user_collection.find({}, {"_id": 1})
+        # Extract '_id' from each document and return them as a list
+        return [user["_id"] for user in user_ids_cursor]
+
     
     def get_users_and_roles(self):
     # Fetch all users and project only the first_name and role
@@ -180,10 +187,33 @@ class Database:
             {"$inc": {"euro_balance": euro_amount}}
         )
 
+    def update_total_topup(self, user_id, amount):
+        self.user_collection.update_one(
+            {"_id": user_id},
+            {"$inc": {"total_topup": amount}}
+        )
+
+    def update_total_donated(self, user_id, amount):
+        self.user_collection.update_one(
+            {"_id": user_id},
+            {"$inc": {"total_donated": amount}}
+        )
+
+
     def get_user_euro_balance(self, user_id: int) -> float:
     
         user = self.user_collection.find_one({"_id": user_id})
         return user.get("euro_balance", 0.0)
+
+    def get_user_financials(self, user_id):
+        user_data = self.user_collection.find_one({"_id": user_id}, {"total_topup": 1, "total_donated": 1})
+        if not user_data:
+            return {"total_topup": 0, "total_donated": 0}  # Defaults in case the fields are missing
+        return {
+            "total_topup": user_data.get("total_topup", 0),  # Return 0 if the field doesn't exist
+            "total_donated": user_data.get("total_donated", 0)
+        }
+
 
     def deduct_euro_balance(self, user_id: int, euro_amount: float):
         self.check_if_user_exists(user_id, raise_exception=True)

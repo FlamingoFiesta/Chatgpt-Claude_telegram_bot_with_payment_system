@@ -131,6 +131,19 @@ async def register_user_if_not_exists(update: Update, context: CallbackContext, 
         db.set_user_attribute(user.id, "n_generated_images", 0)
 
 
+    # Notify admins that a new user has just registered
+    username = user.username or "No username"
+    first_name = user.first_name or "No first name"
+    last_name = user.last_name or "No last name"
+    notification_text = f"A new user has just registered!\n\nUsername: {username}\nFirst Name: {first_name}\nLast Name: {last_name}"
+    for admin_id in config.roles['admin']:
+        try:
+            await context.bot.send_message(chat_id=admin_id, text=notification_text)
+        except Exception as e:
+            # Log the error or handle it appropriately
+            print(f"Failed to send registration to admin: {str(e)}\n\n Don't worry, this doesn't affect you in anyway!")
+
+
 async def is_bot_mentioned(update: Update, context: CallbackContext):
      try:
          message = update.message
@@ -488,7 +501,7 @@ async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
     # Send message with euro amount options
     await context.bot.send_message(
         chat_id=user_id,
-        text="Currently supported payment methods: *Card*, *GooglePay*, *PayPal*, *iDeal*.\n\n For *GPT-4*, 1 euro gives you *75,000* words, or *200 A4 pages*!\nFor *GPT-3.5*, its almost *20 times cheaper*. \n\nPlease select the *amount* you wish to add to your *balance*:\n\n", #topup 1.25 message
+        text="Currently supported payment methods: *Card*, *GooglePay*, *PayPal*, *iDeal*.\n\n For *GPT-4*, *€1* gives you *75,000* words, or *200 A4 pages*!\n\n For *GPT-3.5*, its almost *20 times cheaper*. \n\nPlease select the *amount* you wish to add to your *balance*:\n\n", #topup 1.25 message
         reply_markup=reply_markup,
         parse_mode='Markdown'
     )
@@ -578,8 +591,6 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
 
         await query.edit_message_text(text=payment_text, parse_mode='Markdown', reply_markup=reply_markup, disable_web_page_preview=True)
 
-
-
 async def create_stripe_session(user_id: int, amount_cents: int, context: CallbackContext):
     stripe.api_key = config.stripe_secret_key
     is_donation = context.user_data.get('is_donation', False)
@@ -660,8 +671,8 @@ async def admin_command(update: Update, context: CallbackContext):
     # Check if the user has an admin role
     user_role = db.get_user_role(user_id)
 
-    if user_role != "admin":
-        await update.message.reply_text("You do not have permission to use this command.")
+    if user_id not in config.roles['admin']:
+        await update.message.reply_text("You're not allowed to use this command.")
         return
 
     # List of admin commands
@@ -677,7 +688,8 @@ async def admin_command(update: Update, context: CallbackContext):
         "/send_message_to_id <user_id> <message>",
         "/message_username <user_username> <message>",
         "/message_name <user_first_name> <message>",
-        "/message_role <user_role> <message>"
+        "/message_role <user_role> <message>",
+        "/message_all <message> - Message the entire database",
         # Add more admin commands here
     ]
     commands_text = "\n".join(admin_commands)
@@ -686,8 +698,8 @@ async def admin_command(update: Update, context: CallbackContext):
 async def get_user_count(update, context):
     user_id = update.effective_user.id
 
-    if db.get_user_role(user_id) != "admin":
-        await update.message.reply_text("You do not have permission to use this command.")
+    if user_id not in config.roles['admin']:
+        await update.message.reply_text("You're not allowed to use this command.")
         return
 
     user_count = db.get_user_count()  
@@ -697,8 +709,8 @@ async def list_user_roles(update, context):
     user_id = update.effective_user.id
 
     # Check if the user has the admin role
-    if db.get_user_role(user_id) != "admin":
-        await update.message.reply_text("You do not have permission to use this command.")
+    if user_id not in config.roles['admin']:
+        await update.message.reply_text("You're not allowed to use this command.")
         return
 
     users_and_roles = db.get_users_and_roles()  
@@ -714,8 +726,8 @@ async def send_message_to_id(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
     # Check if the user has the admin role
-    if db.get_user_role(user_id) != "admin":
-        await update.message.reply_text("You do not have permission to use this command.")
+    if user_id not in config.roles['admin']:
+        await update.message.reply_text("You're not allowed to use this command.")
         return
 
     # Extract user_id and message from the command
@@ -738,8 +750,8 @@ async def send_message_to_username(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
     # Check if the user has the admin role
-    if db.get_user_role(user_id) != "admin":
-        await update.message.reply_text("You do not have permission to use this command.")
+    if user_id not in config.roles['admin']:
+        await update.message.reply_text("You're not allowed to use this command.")
         return
 
     try:
@@ -765,8 +777,8 @@ async def send_message_to_username(update: Update, context: CallbackContext):
 async def send_message_to_name(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    if db.get_user_role(user_id) != "admin":
-        await update.message.reply_text("You do not have permission to use this command.")
+    if user_id not in config.roles['admin']:
+        await update.message.reply_text("You're not allowed to use this command.")
         return
 
     try:
@@ -794,9 +806,8 @@ async def send_message_to_name(update: Update, context: CallbackContext):
 async def send_message_to_role(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    # Check if the user has the admin role
-    if db.get_user_role(user_id) != "admin":
-        await update.message.reply_text("You do not have permission to use this command.")
+    if user_id not in config.roles['admin']:
+        await update.message.reply_text("You're not allowed to use this command.")
         return
 
     try:
@@ -812,14 +823,50 @@ async def send_message_to_role(update: Update, context: CallbackContext):
         await update.message.reply_text(f"No users found with the role {role}.")
         return
 
+    formatted_message_text = f"_{message_text}_"
+    #formatted_message_text = f"<b><i>{message_text}</i></b>" #html
     # Send message to each user
     for user in users:
         try:
-            await context.bot.send_message(chat_id=user["_id"], text=message_text)
+            await context.bot.send_message(chat_id=user["_id"], text=formatted_message_text, parse_mode='Markdown')
         except Exception as e:
             # Log or handle individual send errors
             continue
     await update.message.reply_text(f"Message sent to users with the role {role}.")
+
+async def send_message_to_all(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    # Check if the user has the permission to send a broadcast
+    if user_id not in config.roles['admin']:
+        await update.message.reply_text("You're not allowed to use this command.", parse_mode='Markdown')
+        return
+
+    try:
+        _, *message_parts = update.message.text.split(maxsplit=1)  # Split only once to get the whole message after the command
+        message_text = message_parts[0] if message_parts else "No message provided."
+    except ValueError:
+        await update.message.reply_text("Usage: /message_all <message>", parse_mode='Markdown')
+        return
+
+    # Retrieve all users' IDs from the database
+    users_ids = db.get_all_user_ids()  # This function now correctly returns just the user IDs
+    if not users_ids:
+        await update.message.reply_text("No users found in the database.", parse_mode='Markdown')
+        return
+
+    # Send message to each user ID
+    failed_count = 0
+    for user_id in users_ids:
+        try:
+            await context.bot.send_message(chat_id=user_id, text=message_text, parse_mode='Markdown')
+        except Exception as e:
+            failed_count += 1
+            # Log or handle individual send errors
+
+    success_message = f"Message sent to all users. Failures: {failed_count}" if failed_count else "Message successfully sent to all users."
+    await update.message.reply_text(success_message, parse_mode='Markdown')
+
 
 async def change_role(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -848,7 +895,6 @@ async def change_role(update: Update, context: CallbackContext):
         "Please choose a role to switch to:",
         reply_markup=reply_markup
     )
-
 
 async def handle_role_change(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1487,6 +1533,9 @@ async def show_balance_handle_full_details(update: Update, context: CallbackCont
     # count total usage statistics
     total_n_spent_dollars = 0
     total_n_used_tokens = 0
+    financials = db.get_user_financials(user_id)
+    total_topup = financials['total_topup']
+    total_donated = financials['total_donated']
 
     n_used_tokens_dict = db.get_user_attribute(user_id, "n_used_tokens")
     n_generated_images = db.get_user_attribute(user_id, "n_generated_images")
@@ -1518,8 +1567,11 @@ async def show_balance_handle_full_details(update: Update, context: CallbackCont
     total_n_spent_dollars += voice_recognition_n_spent_dollars
 
     text = f"Your euro balance is <b>€{current_euro_balance}</b> \n\n"
-    text += f"You spent ≈ <b>{total_n_spent_dollars:.03f}$</b>\n"
-    text += f"You used <b>{total_n_used_tokens}</b> tokens\n\n"
+    text += "You:\n\n"
+    text += f"   Have yet to make your first payment 😢\n" if total_topup == 0 else f"   Paid <b>{total_topup:.02f}€</b> ❤️\n" if total_topup < 30 else f"   Paid <b>{total_topup:.02f}€</b>. I'm glad you really like using the bot!❤️\n"
+    text += f"   Have not made any donations.\n\n" if total_donated == 0 else f"   Donated <b>{total_donated:.02f}€</b>. You're a legend! ❤️\n\n" if total_donated < 10 else f"   \nDonated <b>{total_donated:.02f}€</b>. I appreciate your continued support!! ❤️❤️\n\n"
+    text += f"   Spent ≈ <b>{total_n_spent_dollars:.03f}$</b> 💵\n"
+    text += f"   Used <b>{total_n_used_tokens}</b> tokens 🪙\n\n"
     text += details_text
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML)
@@ -1555,10 +1607,15 @@ async def callback_show_details(update: Update, context: CallbackContext):
     n_used_tokens_dict = db.get_user_attribute(user_id, "n_used_tokens")
     n_generated_images = db.get_user_attribute(user_id, "n_generated_images")
     n_transcribed_seconds = db.get_user_attribute(user_id, "n_transcribed_seconds")
+    financials = db.get_user_financials(user_id)
+    total_topup = financials['total_topup']
+    total_donated = financials['total_donated']
+    
     
     details_text = "🏷️ Details:\n"
     total_n_spent_dollars = 0
     total_n_used_tokens = 0
+    
     for model_key in sorted(n_used_tokens_dict.keys()):
         n_input_tokens, n_output_tokens = n_used_tokens_dict[model_key]["n_input_tokens"], n_used_tokens_dict[model_key]["n_output_tokens"]
         total_n_used_tokens += n_input_tokens + n_output_tokens
@@ -1579,8 +1636,11 @@ async def callback_show_details(update: Update, context: CallbackContext):
     details_text += f"- Whisper (voice recognition): <b>{voice_recognition_n_spent_dollars:.03f}$</b> / <b>{n_transcribed_seconds:.01f} seconds</b>\n"
 
     text = f"Your euro balance is <b>€{current_euro_balance:.3f}</b> 💶\n\n"
-    text += f"You spent ≈ <b>{total_n_spent_dollars:.03f}$</b> 💵\n"
-    text += f"You used <b>{total_n_used_tokens}</b> tokens 🪙\n\n"
+    text += "You:\n\n"
+    text += f"   Have yet to make your first payment 😢\n" if total_topup == 0 else f"   Paid <b>{total_topup:.02f}€</b> ❤️\n" if total_topup < 30 else f"   Paid <b>{total_topup:.02f}€</b>. I'm glad you really like using the bot!❤️\n"
+    text += f"   Have not made any donations.\n\n" if total_donated == 0 else f"   Donated <b>{total_donated:.02f}€</b>. You're a legend! ❤️\n\n" if total_donated < 10 else f"   \nDonated <b>{total_donated:.02f}€</b>!. I appreciate your continued support!! ❤️❤️\n\n"
+    text += f"   Spent ≈ <b>{total_n_spent_dollars:.03f}$</b> 💵\n"
+    text += f"   Used <b>{total_n_used_tokens}</b> tokens 🪙\n\n"
     text += details_text
 
     print("Attempting to edit message")
@@ -1711,6 +1771,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler('message_username', send_message_to_username))
     application.add_handler(CommandHandler('message_name', send_message_to_name))
     application.add_handler(CommandHandler('message_role', send_message_to_role))
+    application.add_handler(CommandHandler('message_all', send_message_to_all))
     application.add_handler(CommandHandler('change_role', change_role))
     application.add_handler(CallbackQueryHandler(handle_role_change, pattern='^set_role\\|'))
 

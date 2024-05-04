@@ -53,10 +53,10 @@ def stripe_webhook():
                 net_euro_amount = total_amount_paid_euros
 
             db.update_euro_balance(user_id, net_euro_amount)
-
+            db.update_total_topup(user_id, total_amount_paid_euros)
         else:
             net_euro_amount = total_amount_paid_euros
-
+            db.update_total_donated(user_id, net_euro_amount)
 
         send_confirmation_message(user_id, net_euro_amount, is_donation)
     return jsonify({'status': 'success'}), 200
