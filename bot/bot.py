@@ -321,9 +321,29 @@ async def _vision_message_handle_fn(
             await update.message.reply_text(f"Starting new dialog due to timeout (<b>{config.chat_modes[chat_mode]['name']}</b> mode) ✅", parse_mode=ParseMode.HTML)
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
+    transcribed_text = ''
+
+    # Check for a voice message and transcribe if present
+    if update.message.voice:
+        voice = update.message.voice
+        voice_file = await context.bot.get_file(voice.file_id)
+
+        # Store the file in memory, not on disk
+        buf = io.BytesIO()
+        await voice_file.download_to_memory(buf)
+        buf.name = "voice.oga"
+        buf.seek(0)
+
+        # Transcribe the audio
+        transcribed_text = await openai_utils.transcribe_audio(buf)
+        transcribed_text = transcribed_text.strip()
+
     buf = None
-    if update.message.effective_attachment:
-        photo = update.message.effective_attachment[-1]
+    #if update.message.effective_attachment:
+    if update.message.photo:
+        photo = update.message.photo[-1] 
+        #photo = update.message.effective_attachment[-1]
+        #photo = update.message.effective_attachment[-1] if isinstance(update.message.effective_attachment, list) else update.message.effective_attachment
         photo_file = await context.bot.get_file(photo.file_id)
 
         # store file in memory, not on disk
@@ -338,7 +358,7 @@ async def _vision_message_handle_fn(
     try:
         # send placeholder message to user
         placeholder_message = await update.message.reply_text("<i>Making shit up...</i>", parse_mode=ParseMode.HTML)
-        message = update.message.caption or update.message.text or ''
+        message = update.message.caption or update.message.text or transcribed_text or ''
 
         # send typing action
         await update.message.chat.send_action(action="typing")
@@ -429,8 +449,8 @@ async def _vision_message_handle_fn(
 
 
         else:
-            new_dialog_message = {"user": [{"type": "text", "text": message}], "bot": answer, "date": datetime.now()} #repo
-            #new_dialog_message = {"user": message, "bot": answer, "date": datetime.now()}#the test this works
+            #new_dialog_message = {"user": [{"type": "text", "text": message}], "bot": answer, "date": datetime.now()} #repo
+            new_dialog_message = {"user": message, "bot": answer, "date": datetime.now()}#the test this works
             #HERE IS THE ISSUE
         
         db.set_dialog_messages(
@@ -962,7 +982,6 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
     if not await euro_balance_preprocessor(update, context):
         return
 
-    #GITHUB
     if chat_mode == "artist":
         await generate_image_handle(update, context, message=message)
         return
@@ -1165,8 +1184,8 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
 
 
     async with user_semaphores[user_id]:
- #        task = asyncio.create_task(message_handle_fn())
- #        user_tasks[user_id] = task
+#        task = asyncio.create_task(message_handle_fn())
+#        user_tasks[user_id] = task
 
         if current_model == "gpt-4-vision-preview" or update.message.photo is not None and len(update.message.photo) > 0:
             logger.error('gpt-4-vision-preview')
@@ -1248,6 +1267,8 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
     db.deduct_cost_for_action(user_id=user_id, action_type='whisper', action_params={'audio_duration_minutes': audio_duration_minutes}) 
     await message_handle(update, context, message=transcribed_text)
+
+    return transcribed_text
 
 
 async def generate_image_handle(update: Update, context: CallbackContext, message=None):
