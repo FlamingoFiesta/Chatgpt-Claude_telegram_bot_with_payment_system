@@ -1325,7 +1325,7 @@ async def new_dialog_handle(update: Update, context: CallbackContext):
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
-#    db.set_user_attribute(user_id, "current_model", "gpt-4-1106-preview")
+    db.set_user_attribute(user_id, "current_model", "gpt-4-turbo-2024-04-09")
 
     db.start_new_dialog(user_id)
     await update.message.reply_text("Starting new dialog ✅")
