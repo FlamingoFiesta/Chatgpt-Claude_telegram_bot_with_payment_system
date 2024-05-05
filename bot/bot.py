@@ -1245,6 +1245,9 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     if not await euro_balance_preprocessor(update, context):
         return
 
+    placeholder_message = await update.message.reply_text("🎤: <i>Transcribing...</i>", parse_mode=ParseMode.HTML)
+    
+
     voice = update.message.voice
     voice_file = await context.bot.get_file(voice.file_id)
     
@@ -1254,9 +1257,11 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     buf.name = "voice.oga"  # file extension is required
     buf.seek(0)  # move cursor to the beginning of the buffer
 
+    
+
     transcribed_text = await openai_utils.transcribe_audio(buf)
     text = f"🎤: <i>{transcribed_text}</i>"
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    await context.bot.edit_message_text(text, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
 
     audio_duration_minutes = voice.duration / 60.0
 
@@ -1288,6 +1293,8 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
 
     message = message or update.message.text
 
+    placeholder_message = await update.message.reply_text("<i>Waking up Picasso...</i>", parse_mode=ParseMode.HTML)
+
     try:
         image_urls = await openai_utils.generate_images(message, n_images=config.return_n_generated_images, size=config.image_size)
     except openai.error.InvalidRequestError as e:
@@ -1304,6 +1311,8 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
     action_type = 'dalle-2'
     db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_images': config.return_n_generated_images}) 
     
+    final_message = f"Here is my attempt at drawing 🎨 '<i>{message}</i>'! \n\n You like it?"
+    await context.bot.edit_message_text(final_message, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
 
     for i, image_url in enumerate(image_urls):
         await update.message.chat.send_action(action="upload_photo")
@@ -1534,7 +1543,7 @@ async def model_settings_handler(update: Update, context: CallbackContext):
         await display_model_info(query, user_id, context)  # keep the existing reply_markup       
 
     elif data == 'model-artist_model':
-        text = "🎨 Artist Model: <b>Currently not supported. Will be implemented soon</b>\n"
+        text = "🎨 Artist Model: <b>Currently not supported. Will be implemented soon! Default is DALL-E 2</b>\n"
         back_button = [InlineKeyboardButton("⬅️", callback_data='model-back_to_settings')]
         reply_markup = InlineKeyboardMarkup([back_button])
         await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
