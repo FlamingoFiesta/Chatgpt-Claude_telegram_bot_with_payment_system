@@ -1191,7 +1191,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             logger.error('gpt-4-vision-preview')
             if current_model != "gpt-4-vision-preview":
                 current_model = "gpt-4-vision-preview"
-#                db.set_user_attribute(user_id, "current_model", "gpt-4-vision-preview") #this lets you send images to any model and it changes it to vision
+                db.set_user_attribute(user_id, "current_model", "gpt-4-vision-preview") #this lets you send images to any model and it changes it to vision
             task = asyncio.create_task(
                 _vision_message_handle_fn(update, context, use_new_dialog_timeout=use_new_dialog_timeout)
             )
