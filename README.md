@@ -53,7 +53,7 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
   
 - <b>Customizable</b> profit margin based on roles in `config/config.example.yml`
     - In the form of "1.xx", xx being the percentage of profit you want
-       - 1.1 for 10%, 1.05 for 5% etc.
+       - 1.10 for 10%, 1.05 for 5% etc.
 
 - Check user balance before making the API call and prompt them to top-up if it's too low. Can be turned off by changing the persona deduction rates to 0
 

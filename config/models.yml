@@ -99,7 +99,7 @@ info:
   dalle-2:
     type: image
     name: DALL-E 2
-    description: DALL-E 2 is a simpler image generation model capable of creating visuals from text prompts. It's ideal for generating one or multiple variations of images designs and works quickly with multiple resolution options. Perfect for users seeking results at faster speeds and lower costs.
+    description: "<b>DALL-E 2</b> is ideal for generating <b>one</b> or <b>multiple</b> variations of images designs and works quickly with multiple resolution options. Perfect for users seeking results at <b>faster</b> speeds and <b>lower</b> costs."
     resolutions:
       1024x1024:
         price_per_1_image: 0.020
@@ -116,7 +116,7 @@ info:
   dalle-3:
     type: image
     name: DALL-E 3
-    description: DALL-E 3 provides even more detailed and accurate visual generation than DALL-E 2. It features higher quality outputs with customizable resolution and quality settings. This model is great for users looking for high-definition images with a variety of quality options, delivering impressive artwork for your creative needs.
+    description: <b>DALL-E 3</b> provides more <b>detailed</b> and <b>accurate</b> visual generations than DALL-E 2. This model is great for users looking for <b>high-definition</b> images with a variety of quality options.
     qualities:
       standard:
         resolutions:

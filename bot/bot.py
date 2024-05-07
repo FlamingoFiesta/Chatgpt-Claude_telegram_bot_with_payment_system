@@ -578,7 +578,7 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
 
     # Replace the existing message with the top-up options message
         await query.edit_message_text(
-            text="Currently supported payment methods: *Card*, *GooglePay*, *PayPal*, *iDeal*.\n\nPlease select the *amount* you wish to add to your *balance*:",
+            text="Currently supported payment methods: *Card*, *GooglePay*, *PayPal*, *iDeal*.\n\n For *GPT-4*, *€1* gives you *75,000* words, or *200 A4 pages*!\n\n For *GPT-3.5*, its almost *20 times cheaper*. \n\nPlease select the *amount* you wish to add to your *balance*:\n\n",
             reply_markup=reply_markup,
             parse_mode='Markdown'
         ) 
@@ -1294,25 +1294,7 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     return transcribed_text
 
 async def generate_image_handle(update: Update, context: CallbackContext, message=None):
-    # Initialize preferences for all users (temporary block)
-    default_preferences = {
-        "model": "dalle-2",
-        "quality": "standard",
-        "resolution": "1024x1024",
-        "n_images": 1
-    }
 
-    # Find users who don't have the `image_preferences` field or have it set to None
-    missing_preferences = db.user_collection.find({"image_preferences": {"$exists": False}})
-
-    # Add the default preferences for all users missing this field
-    for user in missing_preferences:
-        db.user_collection.update_one(
-            {"_id": user["_id"]},
-            {"$set": {"image_preferences": default_preferences}}
-        )
-
-    #initialize preferences for all users (temporary block)
     """Generate images based on the user's preferences stored in the database."""
     await register_user_if_not_exists(update, context, update.message.from_user)
     if await is_previous_message_not_answered_yet(update, context): return
@@ -1684,7 +1666,7 @@ async def artist_model_settings_handler(query, user_id):
     for score_key, score_value in scores.items():
         details_text += f"{'🟢' * score_value}{'⚪️' * (5 - score_value)} – {score_key}\n"
 
-    details_text += "\nSelect model configurations:"
+    #details_text += "\nSelect model configurations:"
 
     # Create buttons for available image models
     buttons = []
