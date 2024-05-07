@@ -1820,7 +1820,7 @@ async def show_balance_handle(update: Update, context: CallbackContext):
 
     await update.message.reply_text(text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
-async def callback_show_details(update: Update, context: CallbackContext):
+async def callback_show_details_old(update: Update, context: CallbackContext):
     print("Details button pressed")
     query = update.callback_query
     await query.answer()
@@ -1858,6 +1858,78 @@ async def callback_show_details(update: Update, context: CallbackContext):
     total_n_spent_dollars += image_generation_n_spent_dollars + voice_recognition_n_spent_dollars
 
     details_text += f"- DALL·E 2 (image generation): <b>{image_generation_n_spent_dollars:.03f}$</b> / <b>{n_generated_images} images</b>\n"
+    details_text += f"- Whisper (voice recognition): <b>{voice_recognition_n_spent_dollars:.03f}$</b> / <b>{n_transcribed_seconds:.01f} seconds</b>\n"
+
+    text = f"Your euro balance is <b>€{current_euro_balance:.3f}</b> 💶\n\n"
+    text += "You:\n\n"
+    text += f"   Have yet to make your first payment 😢\n" if total_topup == 0 else f"   Paid <b>{total_topup:.02f}€</b> ❤️\n" if total_topup < 30 else f"   Paid <b>{total_topup:.02f}€</b>. I'm glad you really like using the bot!❤️\n"
+    text += f"   Have not made any donations.\n\n" if total_donated == 0 else f"   Donated <b>{total_donated:.02f}€</b>. You're a legend! ❤️\n\n" if total_donated < 10 else f"   \nDonated <b>{total_donated:.02f}€</b>!. I appreciate your continued support!! ❤️❤️\n\n"
+    text += f"   Spent ≈ <b>{total_n_spent_dollars:.03f}$</b> 💵\n"
+    text += f"   Used <b>{total_n_used_tokens}</b> tokens 🪙\n\n"
+    text += details_text
+
+    print("Attempting to edit message")
+    try:
+        await query.edit_message_text(text=text, parse_mode=ParseMode.HTML)
+    except Exception as e:
+        print(f"Failed to edit message: {e}")
+    print("Message edit attempted")
+
+async def callback_show_details(update: Update, context: CallbackContext):
+    print("Details button pressed")
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    current_euro_balance = db.get_user_euro_balance(user_id)
+
+    # Fetch usage statistics
+    n_used_tokens_dict = db.get_user_attribute(user_id, "n_used_tokens")
+    n_generated_images = db.get_user_attribute(user_id, "n_generated_images")
+    n_transcribed_seconds = db.get_user_attribute(user_id, "n_transcribed_seconds")
+    financials = db.get_user_financials(user_id)
+    total_topup = financials['total_topup']
+    total_donated = financials['total_donated']
+
+    details_text = "🏷️ Details:\n"
+    total_n_spent_dollars = 0
+    total_n_used_tokens = 0
+
+    # Calculate the cost of tokens used for each model
+    for model_key in sorted(n_used_tokens_dict.keys()):
+        n_input_tokens, n_output_tokens = n_used_tokens_dict[model_key]["n_input_tokens"], n_used_tokens_dict[model_key]["n_output_tokens"]
+        total_n_used_tokens += n_input_tokens + n_output_tokens
+
+        price_per_1000_input = config.models["info"][model_key].get("price_per_1000_input_tokens", 0)
+        price_per_1000_output = config.models["info"][model_key].get("price_per_1000_output_tokens", 0)
+
+        n_input_spent_dollars = price_per_1000_input * (n_input_tokens / 1000)
+        n_output_spent_dollars = price_per_1000_output * (n_output_tokens / 1000)
+        total_n_spent_dollars += n_input_spent_dollars + n_output_spent_dollars
+
+        details_text += f"- {model_key}: <b>{n_input_spent_dollars + n_output_spent_dollars:.03f}$</b> / <b>{n_input_tokens + n_output_tokens} tokens</b>\n"
+
+    # Calculate total image generation cost for "dalle-2"
+    dalle_2_resolutions = config.models["info"]["dalle-2"]["resolutions"]
+    image_generation_dalle2_dollars = sum(
+        dalle_2_resolutions[res]["price_per_1_image"] * n_generated_images
+        for res in dalle_2_resolutions
+    )
+
+    # Calculate total cost for "dalle-3" by summing over all qualities and their resolutions
+    dalle_3_info = config.models["info"]["dalle-3"]["qualities"]
+    image_generation_dalle3_dollars = 0
+    for quality, res_info in dalle_3_info.items():
+        for res, price_info in res_info["resolutions"].items():
+            # Assuming that the same number of images apply across resolutions
+            image_generation_dalle3_dollars += price_info["price_per_1_image"] * n_generated_images
+
+    voice_recognition_n_spent_dollars = config.models["info"]["whisper"]["price_per_1_min"] * (n_transcribed_seconds / 60)
+
+    total_n_spent_dollars += image_generation_dalle2_dollars + image_generation_dalle3_dollars + voice_recognition_n_spent_dollars
+
+    details_text += f"- DALL·E 2 (image generation): <b>{image_generation_dalle2_dollars:.03f}$</b> / <b>{n_generated_images} images</b>\n"
+    details_text += f"- DALL·E 3 (image generation): <b>{image_generation_dalle3_dollars:.03f}$</b> / <b>{n_generated_images} images</b>\n"
     details_text += f"- Whisper (voice recognition): <b>{voice_recognition_n_spent_dollars:.03f}$</b> / <b>{n_transcribed_seconds:.01f} seconds</b>\n"
 
     text = f"Your euro balance is <b>€{current_euro_balance:.3f}</b> 💶\n\n"
