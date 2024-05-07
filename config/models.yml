@@ -1,6 +1,8 @@
 #available_text_models: ["gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4", "text-davinci-003"] #Big menu
 available_text_models: ["gpt-3.5-turbo", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09"] #small menu with all needed models
+available_image_models: ["dalle-2", "dalle-3"]
 
+#prices per 1k tokens or per image, regularly update from openAI's pricing page to be accurate
 info:
   gpt-3.5-turbo:
     type: chat_completion
@@ -95,11 +97,9 @@ info:
       Cheap: 3
 
   dalle-2:
-     type: image
-     price_per_1_image: 0.018  # 512x512
-
-  dalle-2NOTCONFIGURED:
     type: image
+    name: DALL-E 2
+    description: DALL-E 2 is a simpler image generation model capable of creating visuals from text prompts. It's ideal for generating one or multiple variations of images designs and works quickly with multiple resolution options. Perfect for users seeking results at faster speeds and lower costs.
     resolutions:
       1024x1024:
         price_per_1_image: 0.020
@@ -108,8 +108,15 @@ info:
       256x256:
         price_per_1_image: 0.016
 
+    scores:
+      Quality: 3
+      Fast: 4
+      Cheap: 4
+
   dalle-3:
     type: image
+    name: DALL-E 3
+    description: DALL-E 3 provides even more detailed and accurate visual generation than DALL-E 2. It features higher quality outputs with customizable resolution and quality settings. This model is great for users looking for high-definition images with a variety of quality options, delivering impressive artwork for your creative needs.
     qualities:
       standard:
         resolutions:
@@ -127,6 +134,11 @@ info:
             price_per_1_image: 0.120
           1792x1024:
             price_per_1_image: 0.120
+
+    scores:
+      Quality: 5
+      Fast: 3
+      Cheap: 2
 
   whisper:
     type: audio

@@ -58,6 +58,7 @@ HELP_MESSAGE = """Commands:
 🎨 Generate images from text prompts in <b>👩‍🎨 Artist</b> /mode
 👥 Add bot to <b>group chat</b>: /help_group_chat
 🎤 You can send <b>Voice Messages</b> instead of text
+⌨️ Generate transcripts from voice messages in <b> ⌨️ Stenographer</b> /mode
 
 Important notes:\n
 1. The <b>longer</b> your dialog, the <b>more tokens</b> are spent with each new message, <i><b>I remember our conversation!</b></i> \nTo start a <b>new dialog</b>, send the /new command\n
@@ -965,7 +966,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
         await edited_message_handle(update, context)
         return  
 
-#    _message = message if message is not None else (update.message.caption or update.message.text or '') 
+    #_message = message if message is not None else (update.message.caption or update.message.text or '') 
 
     _message = message or update.message.text
 
@@ -984,6 +985,10 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
 
     if chat_mode == "artist":
         await generate_image_handle(update, context, message=message)
+        return
+    
+    if chat_mode == "stenographer":
+        await voice_message_handle(update, context, message=message)
         return
 
     current_model = db.get_user_attribute(user_id, "current_model")
@@ -1245,7 +1250,12 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     if not await euro_balance_preprocessor(update, context):
         return
 
-    placeholder_message = await update.message.reply_text("🎤: <i>Transcribing...</i>", parse_mode=ParseMode.HTML)
+    chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
+
+    if chat_mode == "stenographer":
+        placeholder_message = await update.message.reply_text("⌨️: <i>Transcribing...</i>", parse_mode=ParseMode.HTML)
+    else:
+        placeholder_message = await update.message.reply_text("🎤: <i>Transcribing...</i>", parse_mode=ParseMode.HTML)
     
 
     voice = update.message.voice
@@ -1261,7 +1271,7 @@ async def voice_message_handle(update: Update, context: CallbackContext):
 
     transcribed_text = await openai_utils.transcribe_audio(buf)
     text = f"🎤: <i>{transcribed_text}</i>"
-    await context.bot.edit_message_text(text, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
+
 
     audio_duration_minutes = voice.duration / 60.0
 
@@ -1270,53 +1280,131 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     db.set_user_attribute(user_id, "n_transcribed_seconds", voice.duration + db.get_user_attribute(user_id, "n_transcribed_seconds"))
     #db.deduct_tokens_based_on_role(user_id, n_input_tokens, n_output_tokens)
     action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
-    db.deduct_cost_for_action(user_id=user_id, action_type='whisper', action_params={'audio_duration_minutes': audio_duration_minutes}) 
+    db.deduct_cost_for_action(user_id=user_id, action_type='whisper', action_params={'audio_duration_minutes': audio_duration_minutes})
+
+    if chat_mode == "stenographer":
+        transcription_message = f"Your transcription is in: \n\n<code>{transcribed_text}</code>"
+        await context.bot.edit_message_text(transcription_message, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
+        return
+    else:
+        await context.bot.edit_message_text(text, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
+
     await message_handle(update, context, message=transcribed_text)
 
     return transcribed_text
 
-
 async def generate_image_handle(update: Update, context: CallbackContext, message=None):
+    # Initialize preferences for all users (temporary block)
+    default_preferences = {
+        "model": "dalle-2",
+        "quality": "standard",
+        "resolution": "1024x1024",
+        "n_images": 1
+    }
+
+    # Find users who don't have the `image_preferences` field or have it set to None
+    missing_preferences = db.user_collection.find({"image_preferences": {"$exists": False}})
+
+    # Add the default preferences for all users missing this field
+    for user in missing_preferences:
+        db.user_collection.update_one(
+            {"_id": user["_id"]},
+            {"$set": {"image_preferences": default_preferences}}
+        )
+
+    #initialize preferences for all users (temporary block)
+    """Generate images based on the user's preferences stored in the database."""
     await register_user_if_not_exists(update, context, update.message.from_user)
     if await is_previous_message_not_answered_yet(update, context): return
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
 
-    #if not await token_balance_preprocessor(update, context):
-        #return
 
+
+    # Retrieve user preferences
+    user_preferences = db.get_user_attribute(user_id, "image_preferences")
+
+    model = user_preferences.get("model", "dalle-2")
+    n_images = user_preferences.get("n_images", 3)
+    resolution = user_preferences.get("resolution", "1024x1024")
+
+    # Ensure sufficient balance before proceeding
     if not await euro_balance_preprocessor(update, context):
         return
 
+    # Send typing action
     await update.message.chat.send_action(action="upload_photo")
 
     message = message or update.message.text
 
+    # Send a placeholder message
     placeholder_message = await update.message.reply_text("<i>Waking up Picasso...</i>", parse_mode=ParseMode.HTML)
 
+    # Generate the images based on user preferences
     try:
-        image_urls = await openai_utils.generate_images(message, n_images=config.return_n_generated_images, size=config.image_size)
+        image_urls = await openai_utils.generate_images(prompt=message or update.message.text, model=model, n_images=n_images, size=resolution)
     except openai.error.InvalidRequestError as e:
         if str(e).startswith("Your request was rejected as a result of our safety system"):
             text = "🥲 Your request <b>doesn't comply</b> with OpenAI's usage policies.\nWhat did you write there, huh?"
             await update.message.reply_text(text, parse_mode=ParseMode.HTML)
             return
         else:
-            raise
+            logging.error(f"OpenAI Invalid Request Error: {str(e)}")
+            text = f"⚠️ There was an issue with your request. Please try again.\n\n<b>Reason</b>: {str(e)}"
+            await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        return
     
-    # token usage
-    db.set_user_attribute(user_id, "n_generated_images", config.return_n_generated_images + db.get_user_attribute(user_id, "n_generated_images"))
-    #action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
-    action_type = 'dalle-2'
-    db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_images': config.return_n_generated_images}) 
-    
-    final_message = f"Here is my attempt at drawing 🎨 '<i>{message}</i>'! \n\n You like it?"
+    except Exception as e:
+        # General error handler for unexpected issues
+        logging.error(f"Unexpected Error: {str(e)}")
+        text = f"⚠️ An unexpected error occurred. Please try again. \n\n<b>Reason</b>: {str(e)}"
+        await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+        return
+
+    # Action parameters
+    action_params = {
+        "model": model,         # DALL-E model 
+        "quality": user_preferences.get("quality", "standard"),  # Image quality
+        "resolution": resolution,  # Resolution (e.g., 1024x1024)
+        "n_images": n_images      # Number of images
+    }
+
+    # Token usage and cost deduction
+    db.set_user_attribute(user_id, "n_generated_images", n_images + db.get_user_attribute(user_id, "n_generated_images"))
+    action_type = user_preferences.get("model", "dalle-2")
+    db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params=action_params)
+
+    # Update the placeholder message with the final image message
+    final_message = f"Here is my attempt at drawing 🎨:\n\n  '<i>{message or ''}</i>'! \n\n Do you like it?"
     await context.bot.edit_message_text(final_message, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
 
-    for i, image_url in enumerate(image_urls):
+    # Upload each generated image
+    for image_url in image_urls:
         await update.message.chat.send_action(action="upload_photo")
-        await update.message.reply_photo(image_url, parse_mode=ParseMode.HTML)
+        #await update.message.reply_photo(image_url, parse_mode=ParseMode.HTML) #old format
+        await upload_image_from_memory(
+            bot=context.bot,
+            chat_id=update.message.chat_id,
+            image_url=image_url
+        )
+
+
+import io
+import requests
+from telegram import InputFile
+
+#some resolutions were throwing an error, so I changed to send the image from memory
+async def upload_image_from_memory(bot, chat_id, image_url):
+    # Download the image to an in-memory buffer
+    response = requests.get(image_url, stream=True)
+    if response.status_code == 200:
+        image_buffer = io.BytesIO(response.content)
+        image_buffer.name = "image.jpg"  # Set a name for the file
+
+        # Send the photo using the in-memory buffer
+        await bot.send_photo(chat_id=chat_id, photo=InputFile(image_buffer, "image.jpg"))
+
 
 
 async def new_dialog_handle(update: Update, context: CallbackContext):
@@ -1542,15 +1630,138 @@ async def model_settings_handler(update: Update, context: CallbackContext):
         db.set_user_attribute(user_id, "current_model", model_key)
         await display_model_info(query, user_id, context)  # keep the existing reply_markup       
 
+    elif data.startswith('model-artist-set_model|'):
+        _, model_key = data.split("|")
+        await switch_between_artist_handler(query, user_id, model_key)
+
     elif data == 'model-artist_model':
-        text = "🎨 Artist Model: <b>Currently not supported. Will be implemented soon! Default is DALL-E 2</b>\n"
-        back_button = [InlineKeyboardButton("⬅️", callback_data='model-back_to_settings')]
-        reply_markup = InlineKeyboardMarkup([back_button])
-        await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+        await artist_model_settings_handler(query, user_id)
+
+    elif data.startswith('model-artist-set_model|'):
+        # Extract the model key and set it in the preferences
+        _, model_key = data.split("|")
+        preferences = db.get_user_attribute(user_id, "image_preferences")
+        preferences["model"] = model_key
+        db.set_user_attribute(user_id, "image_preferences", preferences)
+        await artist_model_settings_handler(query, user_id)
+
+    elif data.startswith("model-artist-set_images|"):
+        _, n_images = data.split("|")
+        preferences = db.get_user_attribute(user_id, "image_preferences")
+        preferences["n_images"] = int(n_images)
+        db.set_user_attribute(user_id, "image_preferences", preferences)
+        await artist_model_settings_handler(query, user_id)
+
+    elif data.startswith("model-artist-set_resolution|"):
+        _, resolution = data.split("|")
+        preferences = db.get_user_attribute(user_id, "image_preferences")
+        preferences["resolution"] = resolution
+        db.set_user_attribute(user_id, "image_preferences", preferences)
+        await artist_model_settings_handler(query, user_id)
+
+    elif data.startswith("model-artist-set_quality|"):
+        _, quality = data.split("|")
+        preferences = db.get_user_attribute(user_id, "image_preferences")
+        preferences["quality"] = quality
+        db.set_user_attribute(user_id, "image_preferences", preferences)
+        await artist_model_settings_handler(query, user_id)
 
     elif data == 'model-back_to_settings':
         text, reply_markup = get_settings_menu(user_id)  # pass user_id correctly
         await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+
+async def artist_model_settings_handler(query, user_id):
+    """Display artist model selection settings."""
+    current_preferences = db.get_user_attribute(user_id, "image_preferences")
+    current_model = current_preferences.get("model", "dalle-2")
+    
+    model_info = config.models["info"][current_model]
+    description = model_info["description"]
+    scores = model_info["scores"]
+
+    # Build the details text with the description and scores
+    details_text = f"{description}\n\n"
+    for score_key, score_value in scores.items():
+        details_text += f"{'🟢' * score_value}{'⚪️' * (5 - score_value)} – {score_key}\n"
+
+    details_text += "\nSelect model configurations:"
+
+    # Create buttons for available image models
+    buttons = []
+    for model_key in config.models["available_image_models"]:
+        title = config.models["info"][model_key]["name"]
+        if model_key == current_model:
+            title = "✅ " + title
+        buttons.append(InlineKeyboardButton(title, callback_data=f"model-artist-set_model|{model_key}"))
+    
+    # Add model-specific configurations
+    if current_model == "dalle-2":
+        details_text += "\nFor this model, choose the number of images to generate and the resolution:"
+        # Add checkmarked buttons for the number of images
+        n_images = current_preferences.get("n_images", 1)
+        images_buttons = [
+            InlineKeyboardButton(
+                                 f"✅ {i} image" if i == n_images and i == 1 else f"✅ {i} images" if i == n_images else f"{i} image" if i == 1 else f"{i} images",
+                                 callback_data=f"model-artist-set_images|{i}")
+            for i in range(1, 4)
+        ]
+        # Add checkmarked buttons for the resolution
+        current_resolution = current_preferences.get("resolution", "1024x1024")
+        resolution_buttons = [
+            InlineKeyboardButton(f"✅ {res_key}" if res_key == current_resolution else f"{res_key}",
+                                 callback_data=f"model-artist-set_resolution|{res_key}")
+            for res_key in config.models["info"]["dalle-2"]["resolutions"].keys()
+        ]
+        keyboard = [buttons] + [images_buttons] + [resolution_buttons]
+
+    elif current_model == "dalle-3":
+        details_text += "\nFor this model, choose the quality of the images and the resolution:"
+        # Add checkmarked buttons for quality levels
+        current_quality = current_preferences.get("quality", "standard")
+        quality_buttons = [
+            InlineKeyboardButton(f"✅ {quality_key}" if quality_key == current_quality else f"{quality_key}",
+                                 callback_data=f"model-artist-set_quality|{quality_key}")
+            for quality_key in config.models["info"]["dalle-3"]["qualities"].keys()
+        ]
+        # Add checkmarked buttons for resolution based on selected quality
+        current_resolution = current_preferences.get("resolution", "1024x1024")
+        resolution_buttons = [
+            InlineKeyboardButton(f"✅ {res_key}" if res_key == current_resolution else f"{res_key}",
+                                 callback_data=f"model-artist-set_resolution|{res_key}")
+            for res_key in config.models["info"]["dalle-3"]["qualities"][current_quality]["resolutions"].keys()
+        ]
+        keyboard = [buttons] + [quality_buttons] + [resolution_buttons]
+    else:
+        keyboard = [buttons]
+
+    # Add back button
+    keyboard.append([InlineKeyboardButton("⬅️", callback_data='model-back_to_settings')])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    try:
+        await query.edit_message_text(text=details_text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
+    except telegram.error.BadRequest as e:
+        if "Message is not modified" in str(e):
+            # Pass silently if the content is the same
+            pass
+
+#is needed to make sure the api call isnt made with wrong parameters
+async def switch_between_artist_handler(query, user_id, model_key):
+    """Handle artist model selection and update preferences."""
+    preferences = db.get_user_attribute(user_id, "image_preferences")
+    
+    # Update the model and set other values based on the chosen model
+    preferences["model"] = model_key
+    if model_key == "dalle-2":
+        preferences["quality"] = "standard"
+    elif model_key == "dalle-3":
+        preferences["n_images"] = 1
+    # Set the default resolution to 1024x1024 when switching models
+    preferences["resolution"] = "1024x1024"
+    
+    # Save the updated preferences back to the database
+    db.set_user_attribute(user_id, "image_preferences", preferences)
+    await artist_model_settings_handler(query, user_id)
 
 #name this show_balance_handle and change the name of the other one if you want all the details shown in one place
 async def show_balance_handle_full_details(update: Update, context: CallbackContext):
@@ -1693,7 +1904,7 @@ async def edited_message_handle(update: Update, context: CallbackContext):
         await update.edited_message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
-async def error_handle(update: Update, context: CallbackContext) -> None:
+async def error_handle_noadmincheck(update: Update, context: CallbackContext) -> None:
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
     try:
@@ -1717,6 +1928,51 @@ async def error_handle(update: Update, context: CallbackContext) -> None:
                 await context.bot.send_message(update.effective_chat.id, message_chunk)
     except:
         await context.bot.send_message(update.effective_chat.id, "Some error in error handler")
+
+async def error_handle(update: Update, context: CallbackContext) -> None:
+    logger.error(msg="Exception while handling an update:", exc_info=context.error)
+
+    # Check if the update has an associated user ID
+    user_id = None
+    if update and update.effective_user:
+        user_id = update.effective_user.id
+
+    # Get the list of admin user IDs from the config
+    admin_ids = config.roles.get('admin', [])
+
+    # Determine if the user is an admin
+    is_admin = user_id in admin_ids
+
+    try:
+        # Collect the error message
+        tb_list = traceback.format_exception(None, context.error, context.error.__traceback__)
+        tb_string = "".join(tb_list)
+        update_str = update.to_dict() if isinstance(update, Update) else str(update)
+        message = (
+            f"An exception was raised while handling an update\n"
+            f"<pre>update = {html.escape(json.dumps(update_str, indent=2, ensure_ascii=False))}"
+            "</pre>\n\n"
+            f"<pre>{html.escape(tb_string)}</pre>"
+        )
+
+        # Send a full error message if the user is an admin, otherwise send a generic message
+        if is_admin:
+            # Split text into multiple messages due to 4096 character limit
+            for message_chunk in split_text_into_chunks(message, 4096):
+                try:
+                    await context.bot.send_message(update.effective_chat.id, message_chunk, parse_mode=ParseMode.HTML)
+                except telegram.error.BadRequest:
+                    # Answer has invalid characters, so we send it without parse_mode
+                    await context.bot.send_message(update.effective_chat.id, message_chunk)
+        else:
+            await context.bot.send_message(
+                update.effective_chat.id,
+                "An unexpected error occurred. Please try again or contact the developer if the issue persists."
+            )
+    except Exception as handler_error:
+        logger.error("Error in error handler: %s", handler_error)
+        await context.bot.send_message(update.effective_chat.id, "Some error in error handler")
+
 
 #set bot commands
 async def post_init(application: Application):
@@ -1783,7 +2039,6 @@ def run_bot() -> None:
 
     application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_settings_handle, pattern="^set_settings"))
-    #application.add_handler(CallbackQueryHandler(callback_query_handler_BONK))
     application.add_handler(CallbackQueryHandler(model_settings_handler, pattern='^model-'))
 
     application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))

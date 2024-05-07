@@ -46,6 +46,12 @@ class Database:
             "current_dialog_id": None,
             "current_chat_mode": "cyberdud",
             "current_model": config.models["available_text_models"][2],
+            "image_preferences": {
+                "model": config.models["available_image_models"][0],
+                "quality": "standard",
+                "resolution": "1024x1024",
+                "n_images": 1
+            },
 
             "n_used_tokens": {},
 
@@ -229,26 +235,57 @@ class Database:
         user_role = self.get_user_role(user_id)
         deduction_rate = config.role_deduction_rates.get(user_role, 1)
 
+        # Retrieve the pricing information from the `config.models` dictionary
+        model_info = config.models["info"].get(action_type)
+        if not model_info:
+            raise ValueError(f"Unknown action type: {action_type}")
+
+        # Initialize the cost variable
+        cost_in_euros = 0
+
+        # Handle text models (per 1000 tokens)
         if action_type in ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-1106-preview', 'gpt-4-vision-preview', 'text-davinci-003', 'gpt-4-turbo-2024-04-09']:
-            # For text models, price is per 1000 tokens
-            total_tokens = action_params.get('n_input_tokens', 0) + action_params.get('n_output_tokens', 0)
-            adjusted_tokens = total_tokens * deduction_rate
-            price_per_1000_tokens_in_euros = config.model_pricing[action_type]
-            cost_in_euros = (adjusted_tokens / 1000) * price_per_1000_tokens_in_euros
 
+            # Retrieve the input/output pricing from `config.models`
+            price_per_1000_input = model_info.get('price_per_1000_input_tokens', 0)
+            price_per_1000_output = model_info.get('price_per_1000_output_tokens', 0)
+
+            # Calculate the cost based on input and output tokens
+            cost_in_euros = ((action_params.get('n_input_tokens', 0) / 1000) * price_per_1000_input + (action_params.get('n_output_tokens', 0) / 1000) * price_per_1000_output) * deduction_rate
+
+        # Handle DALLE-2 (per image)
         elif action_type == 'dalle-2':
-            # For DALLE, price is per image
             n_images = action_params.get('n_images', 1)
-            cost_in_euros = n_images * config.model_pricing[action_type] * deduction_rate
-            #print(f"Action Type: {action_type}, Deduction Rate: {deduction_rate}, N Images: {n_images}, Cost in Euros: {cost_in_euros}")
+            resolution = action_params.get('resolution', '1024x1024')
 
+            # Retrieve the cost per image based on resolution
+            dalle2_resolutions = model_info.get('resolutions', {})
+            price_per_image = dalle2_resolutions.get(resolution, {}).get('price_per_1_image', 0.020)
+
+            cost_in_euros = n_images * price_per_image * deduction_rate
+
+        elif action_type == 'dalle-3':
+            n_images = action_params.get('n_images', 1)
+            quality = action_params.get('quality', 'standard')
+            resolution = action_params.get('resolution', '1024x1024')
+
+            # Retrieve pricing based on quality and resolution
+            dalle3_qualities = model_info.get('qualities', {})
+            quality_info = dalle3_qualities.get(quality, {})
+            resolution_info = quality_info.get('resolutions', {}).get(resolution, {})
+            price_per_image = resolution_info.get('price_per_1_image', 0.040)
+
+            cost_in_euros = n_images * price_per_image * deduction_rate
+
+        # Handle Whisper (per minute)
         elif action_type == 'whisper':
-            # For Whisper, price is per minute
             audio_duration_minutes = action_params.get('audio_duration_minutes', 0)
-            cost_in_euros = audio_duration_minutes * config.model_pricing[action_type] * deduction_rate
+            price_per_minute = model_info.get('price_per_1_min', 0.006)
+
+            cost_in_euros = audio_duration_minutes * price_per_minute * deduction_rate
 
         else:
             raise ValueError(f"Unknown action type: {action_type}")
 
+        # Deduct the calculated cost from the user's balance
         self.deduct_euro_balance(user_id, cost_in_euros)
-

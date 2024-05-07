@@ -31,7 +31,11 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 - Track $ balance spent on OpenAI API
 
 ## What I added
-- <b>16 new chat modes</b>: Cyber Dud (⌐■_■),  💻🟧 Grimoire (Advanced coding assitant), 🖥️ Bash dud (Linux Terminal), 🦆 Duck Mode, and a bunch of characters from movies and shows!
+- <b>16 new chat modes</b>: Cyber Dud (⌐■_■), ⌨️ Stenographer (Speech to text),  💻🟧 Grimoire (Advanced coding assitant), 🖥️ Bash dud (Linux Terminal), 🦆 Duck Mode, and a bunch of characters from movies and shows!
+
+- <b>Transcribe</b> voice messages (choose ⌨️ Stenographer)
+
+- <b>Selectable</b> DALL-E models and their configurations. You can choose between DALL-E 2 which allows you to generate multiple images at once and DALL-E 3 which allows you to choose the image quality. You can choose the image resolution for both models in /settings "Artist model"
 
 - <b>GPT-4 Vision</b> is finally fully integrated and supported (inspiration taken from multiple places as I had issues)
 
@@ -59,7 +63,7 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 ---
 
 ## Upcoming
-- Selectable DALL-E models <b>coming soon</b>
+- TBA
 
 
 ## Bot commands
