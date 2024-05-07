@@ -1875,6 +1875,16 @@ async def callback_show_details_old(update: Update, context: CallbackContext):
         print(f"Failed to edit message: {e}")
     print("Message edit attempted")
 
+# Initialize "total_spent" field for all existing users in the database
+def initialize_total_spent_field():
+    all_users = db.user_collection.find()
+    for user in all_users:
+        if "total_spent" not in user:
+            db.user_collection.update_one(
+                {"_id": user["_id"]},
+                {"$set": {"total_spent": 0}}
+            )
+
 async def callback_show_details(update: Update, context: CallbackContext):
     print("Details button pressed")
     query = update.callback_query
@@ -1882,6 +1892,7 @@ async def callback_show_details(update: Update, context: CallbackContext):
 
     user_id = query.from_user.id
 
+    initialize_total_spent_field()
     # Initialize missing fields for DALL-E 2 and DALL-E 3 tracking
     default_dalle_2 = {"images": 0, "cost": 0.0}
     default_dalle_3 = {"images": 0, "cost": 0.0}
@@ -1907,6 +1918,7 @@ async def callback_show_details(update: Update, context: CallbackContext):
     financials = db.get_user_financials(user_id)
     total_topup = financials['total_topup']
     total_donated = financials['total_donated']
+    total_spent = db.get_user_attribute(user_id, "total_spent")
 
     # Retrieve DALL-E 2 and DALL-E 3 data
     # Retrieve the data after ensuring it's initialized
@@ -1926,24 +1938,24 @@ async def callback_show_details(update: Update, context: CallbackContext):
         n_output_spent_dollars = config.models["info"][model_key]["price_per_1000_output_tokens"] * (n_output_tokens / 1000)
         total_n_spent_dollars += n_input_spent_dollars + n_output_spent_dollars
 
-        details_text += f"- {model_key}: <b>{n_input_spent_dollars + n_output_spent_dollars:.03f}$</b> / <b>{n_input_tokens + n_output_tokens} tokens</b>\n"
+        details_text += f"- {model_key}: <b>{n_input_spent_dollars + n_output_spent_dollars:.03f}€</b> / <b>{n_input_tokens + n_output_tokens} tokens</b>\n"
 
     # Add DALL-E 2 and DALL-E 3 usage to the details
-    details_text += f"- DALL·E 2 (image generation): <b>{dalle_2_data['cost']:.03f}$</b> / <b>{dalle_2_data['images']} images</b>\n"
-    details_text += f"- DALL·E 3 (image generation): <b>{dalle_3_data['cost']:.03f}$</b> / <b>{dalle_3_data['images']} images</b>\n"
+    details_text += f"- DALL·E 2 (image generation): <b>{dalle_2_data['cost']:.03f}€</b> / <b>{dalle_2_data['images']} images</b>\n"
+    details_text += f"- DALL·E 3 (image generation): <b>{dalle_3_data['cost']:.03f}€</b> / <b>{dalle_3_data['images']} images</b>\n"
 
     # Add Whisper usage
     voice_recognition_n_spent_dollars = config.models["info"]["whisper"]["price_per_1_min"] * (n_transcribed_seconds / 60)
     total_n_spent_dollars += voice_recognition_n_spent_dollars
 
-    details_text += f"- Whisper (voice recognition): <b>{voice_recognition_n_spent_dollars:.03f}$</b> / <b>{n_transcribed_seconds:.01f} seconds</b>\n"
+    details_text += f"- Whisper (voice recognition): <b>{voice_recognition_n_spent_dollars:.03f}€</b> / <b>{n_transcribed_seconds:.01f} seconds</b>\n"
 
     # Summary information
     text = f"Your euro balance is <b>€{current_euro_balance:.3f}</b> 💶\n\n"
     text += "You:\n\n"
     text += f"   Have yet to make your first payment 😢\n" if total_topup == 0 else f"   Paid <b>{total_topup:.02f}€</b> ❤️\n" if total_topup < 30 else f"   Paid <b>{total_topup:.02f}€</b>. I'm glad you really like using the bot!❤️\n"
     text += f"   Have not made any donations.\n\n" if total_donated == 0 else f"   Donated <b>{total_donated:.02f}€</b>. You're a legend! ❤️\n\n" if total_donated < 10 else f"   \nDonated <b>{total_donated:.02f}€</b>!. I appreciate your continued support!! ❤️❤️\n\n"
-    text += f"   Spent ≈ <b>{total_n_spent_dollars:.03f}$</b> 💵\n"
+    text += f"   Spent ≈ <b>{total_spent:.03f}€</b> 💵\n"
     text += f"   Used <b>{total_n_used_tokens}</b> tokens 🪙\n\n"
     text += details_text
 

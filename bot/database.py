@@ -54,6 +54,7 @@ class Database:
             },
 
             "n_used_tokens": {},
+            "total_spent": 0,
             "dalle_2": {"images": 0, "cost": 0.0},
             "dalle_3": {"images": 0, "cost": 0.0},
             "n_generated_images": 0,
@@ -229,7 +230,7 @@ class Database:
             raise ValueError("Deduction amount must be positive")
         self.user_collection.update_one(
             {"_id": user_id},
-            {"$inc": {"euro_balance": -euro_amount}}
+            {"$inc": {"euro_balance": -euro_amount, "total_spent": euro_amount}}
         )
 
     def deduct_cost_for_action(self, user_id: int, action_type: str, action_params: dict):
