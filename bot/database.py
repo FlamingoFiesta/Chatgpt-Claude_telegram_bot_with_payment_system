@@ -54,7 +54,8 @@ class Database:
             },
 
             "n_used_tokens": {},
-
+            "dalle_2": {"images": 0, "cost": 0.0},
+            "dalle_3": {"images": 0, "cost": 0.0},
             "n_generated_images": 0,
             "n_transcribed_seconds": 0.0,  # voice message transcription
             "token_balance": 100000,  # Initialize token balance for new users
@@ -264,6 +265,12 @@ class Database:
 
             cost_in_euros = n_images * price_per_image * deduction_rate
 
+            # Update DALL-E 2 tracking in the user database
+            self.user_collection.update_one(
+                {"_id": user_id},
+                {"$inc": {"dalle_2.images": n_images, "dalle_2.cost": cost_in_euros}}
+            )
+
         elif action_type == 'dalle-3':
             n_images = action_params.get('n_images', 1)
             quality = action_params.get('quality', 'standard')
@@ -277,6 +284,12 @@ class Database:
 
             cost_in_euros = n_images * price_per_image * deduction_rate
 
+            # Update DALL-E 3 tracking in the user database
+            self.user_collection.update_one(
+                {"_id": user_id},
+                {"$inc": {"dalle_3.images": n_images, "dalle_3.cost": cost_in_euros}}
+            )
+
         # Handle Whisper (per minute)
         elif action_type == 'whisper':
             audio_duration_minutes = action_params.get('audio_duration_minutes', 0)
@@ -289,3 +302,4 @@ class Database:
 
         # Deduct the calculated cost from the user's balance
         self.deduct_euro_balance(user_id, cost_in_euros)
+        

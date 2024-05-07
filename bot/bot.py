@@ -1881,9 +1881,26 @@ async def callback_show_details(update: Update, context: CallbackContext):
     await query.answer()
 
     user_id = query.from_user.id
-    current_euro_balance = db.get_user_euro_balance(user_id)
 
-    # Fetch usage statistics
+    # Initialize missing fields for DALL-E 2 and DALL-E 3 tracking
+    default_dalle_2 = {"images": 0, "cost": 0.0}
+    default_dalle_3 = {"images": 0, "cost": 0.0}
+
+    all_users = db.user_collection.find()
+    for user in all_users:
+        if "dalle_2" not in user or user["dalle_2"] is None:
+            db.user_collection.update_one(
+                {"_id": user["_id"]},
+                {"$set": {"dalle_2": default_dalle_2}}
+            )
+        if "dalle_3" not in user or user["dalle_3"] is None:
+            db.user_collection.update_one(
+                {"_id": user["_id"]},
+                {"$set": {"dalle_3": default_dalle_3}}
+            )
+
+    # Fetch current balance and stats after ensuring fields exist
+    current_euro_balance = db.get_user_euro_balance(user_id)
     n_used_tokens_dict = db.get_user_attribute(user_id, "n_used_tokens")
     n_generated_images = db.get_user_attribute(user_id, "n_generated_images")
     n_transcribed_seconds = db.get_user_attribute(user_id, "n_transcribed_seconds")
@@ -1891,47 +1908,37 @@ async def callback_show_details(update: Update, context: CallbackContext):
     total_topup = financials['total_topup']
     total_donated = financials['total_donated']
 
+    # Retrieve DALL-E 2 and DALL-E 3 data
+    # Retrieve the data after ensuring it's initialized
+    dalle_2_data = db.get_user_attribute(user_id, "dalle_2") or default_dalle_2
+    dalle_3_data = db.get_user_attribute(user_id, "dalle_3") or default_dalle_3
+
     details_text = "🏷️ Details:\n"
     total_n_spent_dollars = 0
     total_n_used_tokens = 0
 
-    # Calculate the cost of tokens used for each model
+    # Calculate the total spent for each model
     for model_key in sorted(n_used_tokens_dict.keys()):
         n_input_tokens, n_output_tokens = n_used_tokens_dict[model_key]["n_input_tokens"], n_used_tokens_dict[model_key]["n_output_tokens"]
         total_n_used_tokens += n_input_tokens + n_output_tokens
 
-        price_per_1000_input = config.models["info"][model_key].get("price_per_1000_input_tokens", 0)
-        price_per_1000_output = config.models["info"][model_key].get("price_per_1000_output_tokens", 0)
-
-        n_input_spent_dollars = price_per_1000_input * (n_input_tokens / 1000)
-        n_output_spent_dollars = price_per_1000_output * (n_output_tokens / 1000)
+        n_input_spent_dollars = config.models["info"][model_key]["price_per_1000_input_tokens"] * (n_input_tokens / 1000)
+        n_output_spent_dollars = config.models["info"][model_key]["price_per_1000_output_tokens"] * (n_output_tokens / 1000)
         total_n_spent_dollars += n_input_spent_dollars + n_output_spent_dollars
 
         details_text += f"- {model_key}: <b>{n_input_spent_dollars + n_output_spent_dollars:.03f}$</b> / <b>{n_input_tokens + n_output_tokens} tokens</b>\n"
 
-    # Calculate total image generation cost for "dalle-2"
-    dalle_2_resolutions = config.models["info"]["dalle-2"]["resolutions"]
-    image_generation_dalle2_dollars = sum(
-        dalle_2_resolutions[res]["price_per_1_image"] * n_generated_images
-        for res in dalle_2_resolutions
-    )
+    # Add DALL-E 2 and DALL-E 3 usage to the details
+    details_text += f"- DALL·E 2 (image generation): <b>{dalle_2_data['cost']:.03f}$</b> / <b>{dalle_2_data['images']} images</b>\n"
+    details_text += f"- DALL·E 3 (image generation): <b>{dalle_3_data['cost']:.03f}$</b> / <b>{dalle_3_data['images']} images</b>\n"
 
-    # Calculate total cost for "dalle-3" by summing over all qualities and their resolutions
-    dalle_3_info = config.models["info"]["dalle-3"]["qualities"]
-    image_generation_dalle3_dollars = 0
-    for quality, res_info in dalle_3_info.items():
-        for res, price_info in res_info["resolutions"].items():
-            # Assuming that the same number of images apply across resolutions
-            image_generation_dalle3_dollars += price_info["price_per_1_image"] * n_generated_images
-
+    # Add Whisper usage
     voice_recognition_n_spent_dollars = config.models["info"]["whisper"]["price_per_1_min"] * (n_transcribed_seconds / 60)
+    total_n_spent_dollars += voice_recognition_n_spent_dollars
 
-    total_n_spent_dollars += image_generation_dalle2_dollars + image_generation_dalle3_dollars + voice_recognition_n_spent_dollars
-
-    details_text += f"- DALL·E 2 (image generation): <b>{image_generation_dalle2_dollars:.03f}$</b> / <b>{n_generated_images} images</b>\n"
-    details_text += f"- DALL·E 3 (image generation): <b>{image_generation_dalle3_dollars:.03f}$</b> / <b>{n_generated_images} images</b>\n"
     details_text += f"- Whisper (voice recognition): <b>{voice_recognition_n_spent_dollars:.03f}$</b> / <b>{n_transcribed_seconds:.01f} seconds</b>\n"
 
+    # Summary information
     text = f"Your euro balance is <b>€{current_euro_balance:.3f}</b> 💶\n\n"
     text += "You:\n\n"
     text += f"   Have yet to make your first payment 😢\n" if total_topup == 0 else f"   Paid <b>{total_topup:.02f}€</b> ❤️\n" if total_topup < 30 else f"   Paid <b>{total_topup:.02f}€</b>. I'm glad you really like using the bot!❤️\n"
