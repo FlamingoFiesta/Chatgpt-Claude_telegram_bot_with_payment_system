@@ -140,7 +140,6 @@ class Database:
             {"$set": {"messages": dialog_messages}}
         )
     
-    #new additions, they work tho
     def check_token_balance(self, user_id: int) -> int:
         """Check the user's current token balance."""
         user = self.user_collection.find_one({"_id": user_id})
@@ -162,7 +161,14 @@ class Database:
         user = self.user_collection.find_one({"_id": user_id})
         if user and "role" in user:
             return user["role"]
-        return "Trial_User"  # Default role if not explicitly set
+        return "trial_User"  # Default role if not explicitly set
+
+    def get_user_model(self, user_id: int) -> str:
+        """Determine the model of a user based on their user ID."""
+        user = self.user_collection.find_one({"_id": user_id})
+        if user and "current_model" in user:
+            return user["current_model"]
+        return "Some form of GPT I guess, there was an error accesing the database"  
 
     def get_user_count(self):
         return self.user_collection.count_documents({})
@@ -173,6 +179,8 @@ class Database:
         # Extract '_id' from each document and return them as a list
         return [user["_id"] for user in user_ids_cursor]
 
+    def get_user_by_id(self, user_id: int):
+        return self.user_collection.find_one({"_id": user_id})
     
     def get_users_and_roles(self):
     # Fetch all users and project only the first_name and role
@@ -246,7 +254,7 @@ class Database:
         cost_in_euros = 0
 
         # Handle text models (per 1000 tokens)
-        if action_type in ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-1106-preview', 'gpt-4-vision-preview', 'text-davinci-003', 'gpt-4-turbo-2024-04-09']:
+        if action_type in ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-1106-preview', 'gpt-4-vision-preview', 'text-davinci-003', 'gpt-4-turbo-2024-04-09', "gpt-4o"]:
 
             # Retrieve the input/output pricing from `config.models`
             price_per_1000_input = model_info.get('price_per_1000_input_tokens', 0)

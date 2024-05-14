@@ -33,6 +33,13 @@ import database
 import openai_utils
 
 import base64
+import aioredis
+import threading
+import json
+from json import JSONEncoder
+import io
+import requests
+from telegram import InputFile
 
 #remeber ddns for later to replace ngrok
 # setup
@@ -173,13 +180,16 @@ async def start_handle(update: Update, context: CallbackContext):
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
     db.start_new_dialog(user_id)
 
+    developer = config.developer_username
+    developer_info = ' '.join(developer) if isinstance(developer, list) else developer
+
     reply_text = "👋 Heyoo! I'm <b>Chatdud</b>, your friendly neighborhood chatbot. Nice to meet ya! \n\n"
     reply_text += "     I'm a telegram bot 🤖 powered by <b>ChatGPT</b>, and I'm here to help with any questions you might have. \n\n"
     reply_text += "You might ask yourself:\n  <i><b>Why use this bot when I can just use ChatGPT in my browser?</b></i> 🤔\n\n"
     reply_text += "  Well, I use a <b>top-up</b> balance system, meaning you can pay as you go. Don't worry about no monthly $20 subscription!\n\n"
     reply_text += "Also, there is <b>no message limit</b> per hour. As long as you have at least <b>€1.25</b> to feed me, we can chat <b>as much as you want!</b>\n Ain’t that cool?? 😎\n\n"
     reply_text += " 🤫 Psst!\nDon't tell my creator, buut <b>the first euro is on the house!</b> \n\n You have plenty of time to decide if you want to continue using me and support us both. <b>We really appreciate it!</b> 🥰 \n\n"
-    reply_text += "I'm currently in development, for any <b>issues</b> or <b>feedback</b>, don't hesitate to contact my developer @pas_stilat_de_pastilate \n\n"
+    reply_text += f"I'm currently in development, for any <b>issues</b> or <b>feedback</b>, {'don’t hesitate to contact my developer ' + developer_info if developer_info else ' '} \n\n"
     reply_text += HELP_MESSAGE
 
     await update.message.reply_text(reply_text, parse_mode=ParseMode.HTML)
@@ -213,7 +223,7 @@ async def token_balance_preprocessor(update: Update, context: CallbackContext):
     if user_role == "admin":
         return True
 
-    if db.check_token_balance(user_id) < 10:  # Number of minimum tokens needed
+    if db.check_token_balance(user_id) < 100:  # Number of minimum tokens needed
         context.user_data['process_allowed'] = False
         await update.message.reply_text(
             f"_Oops, your balance is too low :( Please top up to continue._ \n\n Your current balance is {current_balance}",
@@ -241,7 +251,6 @@ async def euro_balance_preprocessor(update: Update, context: CallbackContext):
         return True
 
 
-
 async def retry_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
     if await is_previous_message_not_answered_yet(update, context): return
@@ -263,34 +272,32 @@ async def retry_handle(update: Update, context: CallbackContext):
 
     last_dialog_message = dialog_messages.pop()
     db.set_dialog_messages(user_id, dialog_messages, dialog_id=None)  # last message was removed from the context
+    """ #APPARENTLY THIS BREAKS THE FUNCTION, keeping it in case I decide to fix it
+    try:
+        chatgpt_instance = openai_utils.ChatGPT(model=db.get_user_attribute(user_id, "current_model"))
+        answer, (n_input_tokens, n_output_tokens), _ = await chatgpt_instance.send_message(
+            message=last_dialog_message["user"],
+            dialog_messages=dialog_messages[:-1],  # Exclude the last message for retry
+            chat_mode=db.get_user_attribute(user_id, "current_chat_mode")
+        )
+        # Deduct tokens based on the tokens used for the query and response
+        #db.deduct_tokens_based_on_role(user_id, n_input_tokens, n_output_tokens)
 
-#    try:
-#        chatgpt_instance = openai_utils.ChatGPT(model=db.get_user_attribute(user_id, "current_model"))
-#        answer, (n_input_tokens, n_output_tokens), _ = await chatgpt_instance.send_message(
-#            message=last_dialog_message["user"],
-#            dialog_messages=dialog_messages[:-1],  # Exclude the last message for retry
-#            chat_mode=db.get_user_attribute(user_id, "current_chat_mode")
-#        )
-#        # Deduct tokens based on the tokens used for the query and response
-#        #db.deduct_tokens_based_on_role(user_id, n_input_tokens, n_output_tokens)
-#
-#        action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
-#        db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens})  
-#       
-#        # Now handle the response as needed, e.g., sending it back to the user
-#        #await update.message.reply_text(answer)
-#        except Exception as e:
-#            await update.message.reply_text(f"Error retrying message: {str(e)}")
+        action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
+        db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens})  
+       
+        # Now handle the response as needed, e.g., sending it back to the user
+        #await update.message.reply_text(answer)
+        except Exception as e:
+            await update.message.reply_text(f"Error retrying message: {str(e)}")
 
-#    action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
-#    db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens})
+    action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
+    db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens})
 # APPARENTLY THIS BREAKS THE FUNCTION
+    """
     await message_handle(update, context, message=last_dialog_message["user"], use_new_dialog_timeout=False)
 
-#WTF IS THIS
-import json
-from json import JSONEncoder
-
+#for errors
 class CustomEncoder(JSONEncoder):
     def default(self, obj):
         if isinstance(obj, datetime):
@@ -340,11 +347,9 @@ async def _vision_message_handle_fn(
         transcribed_text = transcribed_text.strip()
 
     buf = None
-    #if update.message.effective_attachment:
+    
     if update.message.photo:
         photo = update.message.photo[-1] 
-        #photo = update.message.effective_attachment[-1]
-        #photo = update.message.effective_attachment[-1] if isinstance(update.message.effective_attachment, list) else update.message.effective_attachment
         photo_file = await context.bot.get_file(photo.file_id)
 
         # store file in memory, not on disk
@@ -452,7 +457,7 @@ async def _vision_message_handle_fn(
         else:
             #new_dialog_message = {"user": [{"type": "text", "text": message}], "bot": answer, "date": datetime.now()} #repo
             new_dialog_message = {"user": message, "bot": answer, "date": datetime.now()}#the test this works
-            #HERE IS THE ISSUE
+            #HERE IS THE VISION ISSUE
         
         db.set_dialog_messages(
             user_id,
@@ -471,7 +476,7 @@ async def _vision_message_handle_fn(
         raise
 
     except Exception as e:
-        error_text = f"Something went wrong during completion_FIRST_ISSUE. Reason: {e}" #edit
+        error_text = f"Something went wrong during completion_1. Reason: {e}" #edit, FIRST_ISSUE
         logger.error(error_text)
         await update.message.reply_text(error_text)
         return
@@ -492,6 +497,15 @@ async def show_user_role(update: Update, context: CallbackContext):
     # Send a message to the user with their role
     await update.message.reply_text(f"Your current role is ~ `{user_role}` ~  \n\n Pretty neat huh?", parse_mode='Markdown')
 
+async def show_user_model(update: Update, context: CallbackContext):
+    user_id = update.effective_user.id
+
+    # Fetch the user's role from the database
+    user_model = db.get_user_model(user_id)
+
+    # Send a message to the user with their role
+    await update.message.reply_text(f"Your current model is ~ `{user_model}` ~", parse_mode='Markdown')
+
 async def token_balance_command(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
     token_balance = db.check_token_balance(user_id)
@@ -501,13 +515,22 @@ async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
 
     user_id = chat_id if chat_id else update.effective_user.id
     
+    if config.stripe_secret_key is None or config.stripe_secret_key == "":
+
+        await context.bot.send_message(
+            chat_id=user_id,
+            text="This bot does not have the payment system turned on :(", 
+            parse_mode='Markdown'
+        )
+        return
+
     # Define euro amount options for balance top-up
     euro_amount_options = {
-        "€1.25": 125,  # Example: Add €10 to balance
-        "€3": 300,  # Example: Add €10 to balance
-        "€5": 500,  # Example: Add €10 to balance
-        "€10": 1000,  # Example: Add €20 to balance
-        "€20": 2000,  # Example: Add €50 to balance
+        "€1.25": 125,  # Pay €1.25 and add €1 to balance
+        "€3": 300,  # Add €3 to balance
+        "€5": 500,  # Add €5 to balance
+        "€10": 1000,  # Add €10 to balance
+        "€20": 2000,  # Add €20 to balance
         "Other amount...": "custom",  # Custom amount option
         "Donation ❤️": "donation"
     }
@@ -518,7 +541,7 @@ async def topup_handle(update: Update, context: CallbackContext, chat_id=None):
         for text, amount in euro_amount_options.items()
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    #banner test
+    
     await context.bot.send_photo(chat_id=user_id, photo=open(config.payment_banner_photo_path, 'rb')) #Send the banner
 
     # Send message with euro amount options
@@ -592,8 +615,6 @@ async def topup_callback_handle(update: Update, context: CallbackContext):
         amount_cents = int(amount_str)  # Amount in cents for Stripe
 
         session_url = await create_stripe_session(user_id, amount_cents, context)
-    
-        #await context.bot.send_photo(chat_id=query.message.chat_id, photo=open(config.payment_banner_photo_path, 'rb')) #Send the banner
 
     # Conditional warning for the €1.25 top-up
         if amount_cents == 125:  # Check if the amount is 125 cents (€1.25)                                                    
@@ -635,12 +656,10 @@ async def create_stripe_session(user_id: int, amount_cents: int, context: Callba
     )
     return session.url
 
-
 async def send_confirmation_message_async(user_id, euro_amount, is_donation):
     user = db.user_collection.find_one({"_id": user_id})
     if user:
         chat_id = user["chat_id"]
-        #is_donation = context.user_data.get('is_donation', False)
 
         if is_donation:
             message = f"Thank you *so much* for your generous donation of *€{euro_amount:.2f}*! Your support is *greatly appreciated*!! ❤️❤️"
@@ -657,18 +676,21 @@ async def send_confirmation_message_async(user_id, euro_amount, is_donation):
         await bot_instance.send_message(chat_id=chat_id, text=message, parse_mode='Markdown')
 
 
-
-import aioredis
-import threading
-
 def start_asyncio_loop():
+
+    if config.stripe_webhook_secret is None or config.stripe_webhook_secret == "":
+        return
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(start_redis_listener())
     loop.run_forever()
 
-
 async def start_redis_listener():
+
+    if config.stripe_webhook_secret is None or config.stripe_webhook_secret == "":
+        return
+
     # For aioredis version 2.x, connect to Redis using the new method
     redis = aioredis.from_url("redis://redis:6379", encoding="utf-8", decode_responses=True)
     
@@ -684,8 +706,6 @@ async def start_redis_listener():
                 euro_amount = data['euro_amount']
                 is_donation = data.get('is_donation', False)
                 await send_confirmation_message_async(user_id, euro_amount, is_donation)
-
-
 
 #admin commands
 async def admin_command(update: Update, context: CallbackContext):
@@ -880,16 +900,25 @@ async def send_message_to_all(update: Update, context: CallbackContext):
 
     # Send message to each user ID
     failed_count = 0
+    failed_users = []
+
     for user_id in users_ids:
         try:
             await context.bot.send_message(chat_id=user_id, text=message_text, parse_mode='Markdown')
         except Exception as e:
+            user_details = db.get_user_by_id(user_id)
+            if user_details:
+                failed_users.append(user_details.get('first_name', 'Unknown User'))
+
             failed_count += 1
+            failed_users.append(str(user_id))
             # Log or handle individual send errors
 
     success_message = f"Message sent to all users. Failures: {failed_count}" if failed_count else "Message successfully sent to all users."
-    await update.message.reply_text(success_message, parse_mode='Markdown')
+    failed_users_message = f"\n\nFailed to send message to {failed_count} users: {', '.join(failed_users)}" if failed_users else ""
+    final_message = success_message + failed_users_message
 
+    await update.message.reply_text(final_message, parse_mode='Markdown')
 
 async def change_role(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
@@ -951,10 +980,7 @@ async def handle_role_change(update: Update, context: CallbackContext):
             reply_markup=reply_markup
         )
 
-
-
 # end of admin commands
-
 
 async def message_handle(update: Update, context: CallbackContext, message=None, use_new_dialog_timeout=True):
     # check if bot was mentioned (for group chats)
@@ -965,8 +991,6 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
     if update.edited_message is not None:
         await edited_message_handle(update, context)
         return  
-
-    #_message = message if message is not None else (update.message.caption or update.message.text or '') 
 
     _message = message or update.message.text
 
@@ -1111,9 +1135,9 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                     chat_mode=chat_mode
                 )
 
-                # Handle the response as needed, e.g., sending it back to the user
-#                await context.bot.send_message(chat_id=update.effective_chat.id, text=answer, parse_mode=parse_mode, disable_web_page_preview=True) #repo commit
-                #
+
+                #await context.bot.send_message(chat_id=update.effective_chat.id, text=answer, parse_mode=parse_mode, disable_web_page_preview=True) #repo commit
+
                 async def fake_gen():
                     yield "finished", answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed
 
@@ -1154,10 +1178,8 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
                 db.get_dialog_messages(user_id, dialog_id=None) + [new_dialog_message],
                 dialog_id=None
             )
-            #untested here
-            
         
-            action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model #repo commit #maybe comment this out
+            action_type = db.get_user_attribute(user_id, "current_model") #repo commit #maybe comment this out
             db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params={'n_input_tokens': n_input_tokens, 'n_output_tokens': n_output_tokens}) 
         
             db.update_n_used_tokens(user_id, current_model, n_input_tokens, n_output_tokens)
@@ -1173,7 +1195,7 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
             raise
 
         except Exception as e:
-            error_text = f"Something went wrong during completion_SECOND_ISSUE. Reason: {e}" #edit
+            error_text = f"Something went wrong during completion 2. Reason: {e}" #edit, SECOND_ISSUE
             logger.error(error_text)
             await update.message.reply_text(error_text)
             return
@@ -1189,8 +1211,8 @@ async def message_handle(update: Update, context: CallbackContext, message=None,
 
 
     async with user_semaphores[user_id]:
-#        task = asyncio.create_task(message_handle_fn())
-#        user_tasks[user_id] = task
+        #task = asyncio.create_task(message_handle_fn())
+        #user_tasks[user_id] = task
 
         if current_model == "gpt-4-vision-preview" or update.message.photo is not None and len(update.message.photo) > 0:
             logger.error('gpt-4-vision-preview')
@@ -1231,7 +1253,6 @@ async def is_previous_message_not_answered_yet(update: Update, context: Callback
     else:
         return False
 
-
 async def voice_message_handle(update: Update, context: CallbackContext):
     # check if bot was mentioned (for group chats)
     if not await is_bot_mentioned(update, context):
@@ -1267,19 +1288,14 @@ async def voice_message_handle(update: Update, context: CallbackContext):
     buf.name = "voice.oga"  # file extension is required
     buf.seek(0)  # move cursor to the beginning of the buffer
 
-    
-
     transcribed_text = await openai_utils.transcribe_audio(buf)
     text = f"🎤: <i>{transcribed_text}</i>"
 
-
     audio_duration_minutes = voice.duration / 60.0
-
 
     # update n_transcribed_seconds
     db.set_user_attribute(user_id, "n_transcribed_seconds", voice.duration + db.get_user_attribute(user_id, "n_transcribed_seconds"))
     #db.deduct_tokens_based_on_role(user_id, n_input_tokens, n_output_tokens)
-    action_type = db.get_user_attribute(user_id, "current_model")  # This assumes the action type can be determined by the model
     db.deduct_cost_for_action(user_id=user_id, action_type='whisper', action_params={'audio_duration_minutes': audio_duration_minutes})
 
     if chat_mode == "stenographer":
@@ -1301,8 +1317,6 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
-
-
 
     # Retrieve user preferences
     user_preferences = db.get_user_attribute(user_id, "image_preferences")
@@ -1328,7 +1342,7 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
         image_urls = await openai_utils.generate_images(prompt=message or update.message.text, model=model, n_images=n_images, size=resolution)
     except openai.error.InvalidRequestError as e:
         if str(e).startswith("Your request was rejected as a result of our safety system"):
-            text = "🥲 Your request <b>doesn't comply</b> with OpenAI's usage policies.\nWhat did you write there, huh?"
+            text = "🥲 Your request <b>doesn't comply</b> with OpenAI's usage policies.\nWhat did you write there, huh??"
             await update.message.reply_text(text, parse_mode=ParseMode.HTML)
             return
         else:
@@ -1358,23 +1372,20 @@ async def generate_image_handle(update: Update, context: CallbackContext, messag
     db.deduct_cost_for_action(user_id=user_id, action_type=action_type, action_params=action_params)
 
     # Update the placeholder message with the final image message
-    final_message = f"Here is my attempt at drawing 🎨:\n\n  '<i>{message or ''}</i>'! \n\n Do you like it?"
-    await context.bot.edit_message_text(final_message, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
+    pre_generation_message = f"Here is my attempt at drawing 🎨:\n\n  <i>{message or ''}</i>  \n\n Hold on, the picture is on its way!"
+    await context.bot.edit_message_text(pre_generation_message, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
 
     # Upload each generated image
     for image_url in image_urls:
         await update.message.chat.send_action(action="upload_photo")
-        #await update.message.reply_photo(image_url, parse_mode=ParseMode.HTML) #old format
         await upload_image_from_memory(
             bot=context.bot,
             chat_id=update.message.chat_id,
             image_url=image_url
         )
-
-
-import io
-import requests
-from telegram import InputFile
+    
+    post_generation_message = f"Here is my attempt at drawing 🎨:\n\n  <i>{message or ''}</i>  \n\n Do you like it??"
+    await context.bot.edit_message_text(post_generation_message, chat_id=placeholder_message.chat_id, message_id=placeholder_message.message_id, parse_mode=ParseMode.HTML)
 
 #some resolutions were throwing an error, so I changed to send the image from memory
 async def upload_image_from_memory(bot, chat_id, image_url):
@@ -1386,8 +1397,6 @@ async def upload_image_from_memory(bot, chat_id, image_url):
 
         # Send the photo using the in-memory buffer
         await bot.send_photo(chat_id=chat_id, photo=InputFile(image_buffer, "image.jpg"))
-
-
 
 async def new_dialog_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
@@ -1403,7 +1412,6 @@ async def new_dialog_handle(update: Update, context: CallbackContext):
     chat_mode = db.get_user_attribute(user_id, "current_chat_mode")
     await update.message.reply_text(f"{config.chat_modes[chat_mode]['welcome_message']}", parse_mode=ParseMode.HTML)
 
-
 async def cancel_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
 
@@ -1415,7 +1423,6 @@ async def cancel_handle(update: Update, context: CallbackContext):
         task.cancel()
     else:
         await update.message.reply_text("<i>Nothing to cancel...</i>", parse_mode=ParseMode.HTML)
-
 
 def get_chat_mode_menu(page_index: int):
     n_chat_modes_per_page = config.n_chat_modes_per_page
@@ -1453,7 +1460,6 @@ def get_chat_mode_menu(page_index: int):
 
     return text, reply_markup
 
-
 async def show_chat_modes_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update, context, update.message.from_user)
     if await is_previous_message_not_answered_yet(update, context): return
@@ -1463,7 +1469,6 @@ async def show_chat_modes_handle(update: Update, context: CallbackContext):
 
     text, reply_markup = get_chat_mode_menu(0)
     await update.message.reply_text(text, reply_markup=reply_markup, parse_mode=ParseMode.HTML)
-
 
 async def show_chat_modes_callback_handle(update: Update, context: CallbackContext):
      await register_user_if_not_exists(update.callback_query, context, update.callback_query.from_user)
@@ -1486,7 +1491,6 @@ async def show_chat_modes_callback_handle(update: Update, context: CallbackConte
          if str(e).startswith("Message is not modified"):
              pass
 
-
 async def set_chat_mode_handle(update: Update, context: CallbackContext):
     await register_user_if_not_exists(update.callback_query, context, update.callback_query.from_user)
     user_id = update.callback_query.from_user.id
@@ -1504,7 +1508,6 @@ async def set_chat_mode_handle(update: Update, context: CallbackContext):
         f"{config.chat_modes[chat_mode]['welcome_message']}",
         parse_mode=ParseMode.HTML
     )
-
 
 def get_settings_menu(user_id: int):
     text = "⚙️ Settings:"
@@ -1541,7 +1544,6 @@ async def set_settings_handle(update: Update, context: CallbackContext):
 
     await display_model_info(query, user_id, context)
 
-
 async def display_model_info(query, user_id, context):
     current_model = db.get_user_attribute(user_id, "current_model")
     model_info = config.models["info"][current_model]
@@ -1571,7 +1573,6 @@ async def display_model_info(query, user_id, context):
         await query.edit_message_text(text=details_text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
     except telegram.error.BadRequest as e:
         if "Message is not modified" in str(e):
-            # Optionally, inform the user that no changes were detected, or simply pass to avoid noise.
             pass
 
 #for the settings menu
@@ -1666,8 +1667,6 @@ async def artist_model_settings_handler(query, user_id):
     for score_key, score_value in scores.items():
         details_text += f"{'🟢' * score_value}{'⚪️' * (5 - score_value)} – {score_key}\n"
 
-    #details_text += "\nSelect model configurations:"
-
     # Create buttons for available image models
     buttons = []
     for model_key in config.models["available_image_models"]:
@@ -1724,7 +1723,6 @@ async def artist_model_settings_handler(query, user_id):
         await query.edit_message_text(text=details_text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
     except telegram.error.BadRequest as e:
         if "Message is not modified" in str(e):
-            # Pass silently if the content is the same
             pass
 
 #is needed to make sure the api call isnt made with wrong parameters
@@ -1921,7 +1919,6 @@ async def callback_show_details(update: Update, context: CallbackContext):
     total_spent = db.get_user_attribute(user_id, "total_spent")
 
     # Retrieve DALL-E 2 and DALL-E 3 data
-    # Retrieve the data after ensuring it's initialized
     dalle_2_data = db.get_user_attribute(user_id, "dalle_2") or default_dalle_2
     dalle_3_data = db.get_user_attribute(user_id, "dalle_3") or default_dalle_3
 
@@ -1966,7 +1963,6 @@ async def callback_show_details(update: Update, context: CallbackContext):
         print(f"Failed to edit message: {e}")
     print("Message edit attempted")
 
-
 async def edited_message_handle(update: Update, context: CallbackContext):
 
     
@@ -1976,7 +1972,7 @@ async def edited_message_handle(update: Update, context: CallbackContext):
         text = "🥲 Unfortunately, message <b>editing</b> is not supported"
         await update.edited_message.reply_text(text, parse_mode=ParseMode.HTML)
 
-
+#if you want to give the full error to all users, change this to error_handle
 async def error_handle_noadmincheck(update: Update, context: CallbackContext) -> None:
     logger.error(msg="Exception while handling an update:", exc_info=context.error)
 
@@ -2010,11 +2006,9 @@ async def error_handle(update: Update, context: CallbackContext) -> None:
     if update and update.effective_user:
         user_id = update.effective_user.id
 
-    # Get the list of admin user IDs from the config
     admin_ids = config.roles.get('admin', [])
-
-    # Determine if the user is an admin
     is_admin = user_id in admin_ids
+    developer = config.developer_username
 
     try:
         # Collect the error message
@@ -2038,14 +2032,19 @@ async def error_handle(update: Update, context: CallbackContext) -> None:
                     # Answer has invalid characters, so we send it without parse_mode
                     await context.bot.send_message(update.effective_chat.id, message_chunk)
         else:
+            error_for_user = (
+                f"An unexpected error occurred. "
+                f"{'Please try again, or contact ' + ', '.join(developer) + ' if the issue persists.' if developer else 'Please try again or contact the support if the issue persists.'} \n\n"
+            )
+
             await context.bot.send_message(
                 update.effective_chat.id,
-                "An unexpected error occurred. Please try again or contact the developer if the issue persists."
+                #"An unexpected error occurred. Please try again or contact the developer if the issue persists."
+                error_for_user
             )
     except Exception as handler_error:
         logger.error("Error in error handler: %s", handler_error)
         await context.bot.send_message(update.effective_chat.id, "Some error in error handler")
-
 
 #set bot commands
 async def post_init(application: Application):
@@ -2057,14 +2056,17 @@ async def post_init(application: Application):
         BotCommand("/topup", "Top-up your balance 💳"), 
         BotCommand("/settings", "Show settings ⚙️"),
         BotCommand("/help", "Show help message ❓"),
-        BotCommand("/role", "Show your role 🎫")
-
+        BotCommand("/role", "Show your role 🎫"),
+        BotCommand("/model", "Show your current selected model 🔍"),
          
     ])
 
 bot_instance = None
 
 def run_bot() -> None:
+
+    thread = threading.Thread(target=start_asyncio_loop, daemon=True)
+    thread.start()
 
     global bot_instance
     application = ApplicationBuilder().token(config.telegram_token).build()
@@ -2118,10 +2120,10 @@ def run_bot() -> None:
     application.add_handler(CallbackQueryHandler(callback_show_details, pattern='^show_details$'))
     #custom commands
     application.add_handler(CommandHandler('role', show_user_role))
+    application.add_handler(CommandHandler('model', show_user_model))
     application.add_handler(CommandHandler('token_balance', token_balance_command))
     application.add_handler(CommandHandler("topup", topup_handle, filters=filters.ALL))
     application.add_handler(CallbackQueryHandler(topup_callback_handle, pattern='^topup\\|'))
-    #application.add_handler(CallbackQueryHandler(topup_callback_handle))
 
     #admin commands
     application.add_handler(CommandHandler("admin", admin_command))
@@ -2142,8 +2144,8 @@ def run_bot() -> None:
 
 
 if __name__ == "__main__":
-    thread = threading.Thread(target=start_asyncio_loop, daemon=True)
-    thread.start()
+    #thread = threading.Thread(target=start_asyncio_loop, daemon=True)
+    #thread.start()
     
     run_bot()
-    #redis_thread.join()
+

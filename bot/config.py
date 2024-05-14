@@ -14,8 +14,9 @@ config_env = dotenv.dotenv_values(config_dir / "config.env")
 # config parameters
 telegram_token = config_yaml["telegram_token"]
 openai_api_key = config_yaml["openai_api_key"]
+developer_username =  config_yaml["developer_username"]
 stripe_secret_key = config_yaml["stripe_secret_key"]
-stripe_webhook_secret = config_yaml.get("stripe_webhook_secret", None)  # Using .get() with a default value of None
+stripe_webhook_secret = config_yaml.get("stripe_webhook_secret", None)  
 openai_api_base = config_yaml.get("openai_api_base", None)
 allowed_telegram_usernames = config_yaml["allowed_telegram_usernames"]
 new_dialog_timeout = config_yaml["new_dialog_timeout"]

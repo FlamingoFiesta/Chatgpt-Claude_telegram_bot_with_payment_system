@@ -10,7 +10,8 @@ import stripe
 from telegram import Bot
 import config
 from database import Database
-
+import redis
+import json
 
 db = Database()
 app = Flask(__name__)
@@ -62,10 +63,12 @@ def stripe_webhook():
     return jsonify({'status': 'success'}), 200
 
 
-import redis
-import json
-
 def send_confirmation_message(user_id, euro_amount, is_donation):
+
+    if not config.stripe_webhook_secret or config.stripe_webhook_secret.strip() == "":
+        print("Stripe webhook secret not set, skipping Redis operations.")
+        return
+
     redis_client = redis.Redis(host='redis', port=6379, db=0)
     data = {
         'user_id': user_id,
@@ -76,4 +79,8 @@ def send_confirmation_message(user_id, euro_amount, is_donation):
 
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+    if not config.stripe_webhook_secret or config.stripe_webhook_secret.strip() == "":
+        print("No Stripe webhook secret provided. Exiting.")
+        sys.exit(0)
+    else:
+        app.run(host='0.0.0.0', port=5000)

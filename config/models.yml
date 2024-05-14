@@ -1,5 +1,5 @@
 #available_text_models: ["gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4", "text-davinci-003"] #Big menu
-available_text_models: ["gpt-3.5-turbo", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09"] #small menu with all needed models
+available_text_models: ["gpt-3.5-turbo", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"] #small menu with all needed models
 available_image_models: ["dalle-2", "dalle-3"]
 
 #prices per 1k tokens or per image, regularly update from openAI's pricing page to be accurate
@@ -26,7 +26,7 @@ info:
     price_per_1000_output_tokens: 0.004
 
     scores:
-      Smart: 3
+      Smart: 2
       Fast: 5
       Cheap: 5
 
@@ -66,7 +66,7 @@ info:
 
     scores:
       smart: 5
-      fast: 4
+      fast: 3
       cheap: 3
 
   gpt-4-turbo-2024-04-09: #new turbo
@@ -80,8 +80,22 @@ info:
 
     scores:
       smart: 5
-      fast: 4
+      fast: 3
       cheap: 3
+
+  gpt-4o: #may model
+
+    type: chat_completion
+    name: GPT-4o "Omni"
+    description: "GPT-4o is <b>2x faster</b> and is <b>50% cheaper</b> than GPT-4 Turbo. It has the best vision and performance across non-English languages of any of the OpenAI models.\n\n It just released so expect it to be buggy and weird, try it out and let me know what you think. OpenAI says its knowledge cutoff is october 2023, even if when asked it says something different. I reduced the consumption for this testing period.\n Use the <b>/model</b> command to check which model is currently being used in the api"
+    #GPT-4o is <b>2x faster</b> and is <b>50% cheaper</b> than GPT-4 Turbo. It has the best vision and performance across non-English languages of any of the OpenAI models.
+    price_per_1000_input_tokens: 0.001 #0.005
+    price_per_1000_output_tokens: 0.010 #0.015
+
+    scores:
+      smart: 5
+      fast: 4
+      cheap: 4
 
   text-davinci-003:
     type: completion

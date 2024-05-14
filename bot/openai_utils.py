@@ -22,6 +22,7 @@ OPENAI_COMPLETION_OPTIONS = {
     "presence_penalty": 0,
     "request_timeout": 60.0,
 }
+
 #GPT HELP 2
 def validate_payload(payload): #maybe comment out
     # Example validation: Ensure all messages have content that is a string
@@ -34,7 +35,7 @@ def validate_payload(payload): #maybe comment out
 
 class ChatGPT:
     def __init__(self, model="gpt-4-1106-preview"):
-        assert model in {"text-davinci-003", "gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09"}, f"Unknown model: {model}"
+        assert model in {"text-davinci-003", "gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"}, f"Unknown model: {model}"
         self.model = model
 
     async def send_message(self, message, dialog_messages=[], chat_mode="assistant"):
@@ -45,7 +46,7 @@ class ChatGPT:
         answer = None
         while answer is None:
             try:
-                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09"}:
+                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"}:
                     messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
                     #GPT HELP 2
                     validate_payload({
@@ -101,7 +102,7 @@ class ChatGPT:
         answer = None
         while answer is None:
             try:
-                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-turbo-2024-04-09"}:
+                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"}:
                     messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
                     
                     r_gen = await openai.ChatCompletion.acreate(
@@ -327,8 +328,11 @@ class ChatGPT:
             tokens_per_name = 1
         elif model == "gpt-4-vision-preview":
             tokens_per_message = 3
+            tokens_per_name = 1 
+        elif model == "gpt-4-turbo-2024-04-09": 
+            tokens_per_message = 3
             tokens_per_name = 1
-        elif model == "gpt-4-turbo-2024-04-09":
+        elif model == "gpt-4o": 
             tokens_per_message = 3
             tokens_per_name = 1
         else:

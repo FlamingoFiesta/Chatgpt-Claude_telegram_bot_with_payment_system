@@ -1,4 +1,4 @@
-# ChatGPT Telegram Bot fork: **No daily limits. Special chat modes** 
+# ChatGPT Telegram Bot : **No daily limits. Special chat modes.** 
 
 <div align="center">
 <img src="https://raw.githubusercontent.com/FlamingoFiesta/Chatgpt_telegram_bot_karfly-fork/main/static/header.png" align="center" style="width: 100%" />
@@ -31,25 +31,28 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 - Track $ balance spent on OpenAI API
 
 ## What I added
-- <b>16 new chat modes</b>: Cyber Dud (⌐■_■), ⌨️ Stenographer (Speech to text),  💻🟧 Grimoire (Advanced coding assitant), 🖥️ Bash dud (Linux Terminal), 🦆 Duck Mode, and a bunch of characters from movies and shows!
+- <b>GPT-4 Vision</b> is finally fully integrated and supported (inspiration taken from multiple places as I had issues)
 
-- <b>Transcribe</b> voice messages (choose ⌨️ Stenographer)
+- <b>GPT-4o (omni)</b> support, faster and cheaper than GPT-4 turbo, with october 2023 knowledge cut-off date.
+  - It was released two days ago (13.05.2024), so right now its only used as the text model, further testing will be required until I decide to make it the default vision model. 
+
+- <b>15 new chat modes</b>: Cyber Dud (⌐■_■), ⌨️ Stenographer (Speech to text),  💻🟧 Grimoire (Advanced coding assitant), 🖥️ Bash dud (Linux Terminal), 🦆 Duck Mode, and a bunch of characters from movies and shows!
+
+- <b>Transcribe</b> voice messages (choose ⌨️ Stenographer) 
 
 - <b>Selectable</b> DALL-E models and their configurations. You can choose between DALL-E 2 which allows you to generate multiple images at once and DALL-E 3 which allows you to choose the image quality. You can choose the image resolution for both models in /settings "Artist model"
-
-- <b>GPT-4 Vision</b> is finally fully integrated and supported (inspiration taken from multiple places as I had issues)
 
 - <b>Improved</b> start and help messages
 
 - <b>Improved</b> the <b>settings</b> and <b>balance</b> menus, theyre now more user friendly and clean
-  
-- Payment system using Stripe, updating user balance automatically after payment (redis listener needs to be configured)
-  
-- Special donation button
 
 - Different user roles: <b>admin</b>, <b>beta tester</b>, <b>friend</b>, <b>regular user</b>, <b>trial user</b>
     - All new users start as a trial user with 1 euro balance, and are automatically upgraded to regular user after first payment
     - Special admin-only commands that can be used directly from the telegram app
+  
+- Payment system using Stripe, updating user balance automatically after payment
+  
+- Special donation button
   
 - <b>Customizable</b> profit margin based on roles in `config/config.example.yml`
     - In the form of "1.xx", xx being the percentage of profit you want
@@ -59,12 +62,15 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 
 - Tracking the balance in euros and tokens. The default is in euros, advanced users and switch to the token system, the functions are there.
 
-
+- The ability to run either the full version with the payment system, or the one without it, freeing up resources if it isnt used.
+  
 ---
 
-## Upcoming
-- TBA
+## Upcoming:
 
+- If GPT-4o "Omni" proves to be a stable model, it will be the new default for both text and vision capabilities since OpenAI claims its better at other languages that arent english
+- Adding the posibility to view and resume past conversations
+- <b>/menu</b> command that displays the commands as buttons for a more seamless interaction
 
 ## Bot commands
 - `/new` – Start new dialog
@@ -75,6 +81,7 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
 - `/settings` – Show settings
 - `/help` – Show the commands
 - `/role` – Show your role
+- `/model` - Show your current selected model
 
 ## Setup
 1. Get your [OpenAI API](https://openai.com/api/) key
@@ -152,18 +159,27 @@ You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot
        
     8. Now youre done setting up the payment system, good job! 
           
-7. **(Optional for those that havent configured the payment system but recommended for efficiency)** If you did not configure the payment system with stripe, you can run the bot as is but it will create two extra containers that have no use for you which will use extra memory. Edit the ```docker-compose.yml``` file, find the comment that says ```payment``` and delete the redis line, also find the comment that says ```#delete everything below if not payment system``` and delete everything that is under it.
-    - At the moment, if you select a payment ammount youll get an error stating you dont have the API key, in the future I'll make it handle the error gracefuly and send a message           stating that you did not configure the payment system.
-
-8. 🔥 And now, cd to the ```Chatgpt_telegram_bot_karfly-fork``` directory **run**:
+7. 🔥 And now, cd to the ```Chatgpt_telegram_bot_karfly-fork``` directory
+   
+   - If you use the payment system, **run**:
+     
     ```bash
     docker-compose --env-file config/config.env up --build
     ```
+    
+    - If you dont use the payment system, **run**:
+      
+    ```terminal
+    docker-compose -f docker-compose_nopayment.yml --env-file config/config.env up --build
+    ```
+    
 ##
 
 ## ❤️ Top Donations
 If you found my fork useful, use the topup command in my bot for any donations!
 Send me a message so that I know it was you who donated, you can be on this list:
+
+1. "." - €10, no special message, but thank you for being the first to donate!
 
 ## Contributors
 - [Karfly](https://github.com/father-bot/chatgpt_telegram_bot) for the foundation of the code

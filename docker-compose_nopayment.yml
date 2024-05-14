@@ -20,7 +20,7 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - mongo
-#      - redis #payment
+
 
   mongo_express:
     container_name: mongo-express
@@ -37,29 +37,3 @@ services:
       - ME_CONFIG_BASICAUTH_PASSWORD=${MONGO_EXPRESS_PASSWORD:-password}
     depends_on:
       - mongo
-
-  
-  flask_app: # Flask application for handling Stripe webhooks
-    container_name: flask_stripe_webhook
-    build:
-      context: "."
-      dockerfile: Dockerfile
-    ports:
-      - "5000:5000" # Map the internal port 5000 to the host
-    volumes:
-      - .:/code
-    command: flask run --host=0.0.0.0 --port=5000
-    environment:
-      FLASK_APP: flask/flask_app.py
-      FLASK_RUN_HOST: 0.0.0.0
-    depends_on:
-      - mongo
-      - redis
-
-
-  redis:
-    container_name: redis
-    image: redis:latest
-    restart: always
-    ports:
-      - "6379:6379"
