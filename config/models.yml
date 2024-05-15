@@ -89,8 +89,8 @@ info:
     name: GPT-4o "Omni"
     description: "GPT-4o is <b>2x faster</b> and is <b>50% cheaper</b> than GPT-4 Turbo. It has the best vision and performance across non-English languages of any of the OpenAI models.\n\n It just released so expect it to be buggy and weird, try it out and let me know what you think. OpenAI says its knowledge cutoff is october 2023, even if when asked it says something different. I reduced the consumption for this testing period.\n Use the <b>/model</b> command to check which model is currently being used in the api"
     #GPT-4o is <b>2x faster</b> and is <b>50% cheaper</b> than GPT-4 Turbo. It has the best vision and performance across non-English languages of any of the OpenAI models.
-    price_per_1000_input_tokens: 0.001 #0.005
-    price_per_1000_output_tokens: 0.010 #0.015
+    price_per_1000_input_tokens: 0.005
+    price_per_1000_output_tokens: 0.015
 
     scores:
       smart: 5

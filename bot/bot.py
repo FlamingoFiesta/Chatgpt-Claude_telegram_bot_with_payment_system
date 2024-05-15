@@ -4,7 +4,7 @@ import asyncio
 import traceback
 import html
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import openai
 
 import stripe
@@ -40,15 +40,14 @@ from json import JSONEncoder
 import io
 import requests
 from telegram import InputFile
+import pytz
 
-#remeber ddns for later to replace ngrok
 # setup
 db = database.Database()
 logger = logging.getLogger(__name__)
 
 user_semaphores = {}
 user_tasks = {}
-
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s') #logging error
 HELP_MESSAGE = """Commands:
@@ -750,17 +749,41 @@ async def get_user_count(update, context):
 
 async def list_user_roles(update, context):
     user_id = update.effective_user.id
+    local_timezone= config.timezone
+    LOCAL_TIMEZONE = pytz.timezone(local_timezone)
 
     # Check if the user has the admin role
     if user_id not in config.roles['admin']:
         await update.message.reply_text("You're not allowed to use this command.")
         return
 
-    users_and_roles = db.get_users_and_roles()  
-    message_lines = [
-        f"`{user.get('username', 'No Username')}` | `{user.get('first_name', 'No First Name')}` | `{user.get('role', 'No Role')}`" 
-        for user in users_and_roles
-    ]
+    users_and_roles = db.get_users_and_roles()
+    message_lines = []
+
+    for user in users_and_roles:
+        username = user.get('username', 'No Username')
+        first_name = user.get('first_name', 'No First Name')
+        role = user.get('role', 'No Role')
+        last_interaction = user.get('last_interaction')
+
+        # Adjusting the datetime
+        if last_interaction:
+            last_interaction = last_interaction.replace(tzinfo=pytz.UTC)  # Ensure it has UTC timezone
+            local_last_interaction = last_interaction.astimezone(LOCAL_TIMEZONE)
+            now_local = datetime.now(LOCAL_TIMEZONE)
+
+            if local_last_interaction.date() == now_local.date():
+                last_interaction_str = local_last_interaction.strftime('%H:%M')
+            else:
+                days_ago = (now_local.date() - local_last_interaction.date()).days
+                last_interaction_str = f"{days_ago} days ago"
+        else:
+            last_interaction_str = 'No Time'
+
+        message_lines.append(
+            f"`{username}` | `{first_name}` | `{role}` | `{last_interaction_str}`"
+        )
+
     message_text = "\n\n".join(message_lines)
 
     await update.message.reply_text(message_text, parse_mode='Markdown')

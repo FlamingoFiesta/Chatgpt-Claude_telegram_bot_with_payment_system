@@ -1,11 +1,12 @@
 python-telegram-bot[rate-limiter]==20.1
 openai==0.28.1
-tiktoken>=0.3.0
-PyYAML==6.0
-pymongo==4.3.3
-python-dotenv==0.21.0
-stripe>=2.60.0
-Flask==2.0.1
-Werkzeug==2.0.1
-redis>=4.0.2
-aioredis>=2.0.0
+tiktoken>=0.3.0 #tokenizer
+PyYAML==6.0 #configs 
+pymongo==4.3.3 #database
+python-dotenv==0.21.0 #.env files
+stripe>=2.60.0 #payment method
+Flask==2.0.1 #payment recieve notif
+Werkzeug==2.0.1 #payment recieve notif and debug
+redis>=4.0.2 #payment recieve notif
+aioredis>=2.0.0 #payment recieve notif
+pytz==2023.3 #timezone management

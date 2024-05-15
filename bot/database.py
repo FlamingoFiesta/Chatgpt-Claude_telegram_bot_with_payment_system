@@ -170,6 +170,13 @@ class Database:
             return user["current_model"]
         return "Some form of GPT I guess, there was an error accesing the database"  
 
+    def get_user_last_interaction(self, user_id: int) -> str:
+        """Determine the model of a user based on their user ID."""
+        user = self.user_collection.find_one({"_id": user_id})
+        if user and "last_interaction" in user:
+            return user["last_interaction"]
+        return "Not found" 
+
     def get_user_count(self):
         return self.user_collection.count_documents({})
 
@@ -184,7 +191,7 @@ class Database:
     
     def get_users_and_roles(self):
     # Fetch all users and project only the first_name and role
-        users_cursor = self.user_collection.find({}, {"username": 1,"first_name": 1, "role": 1})
+        users_cursor = self.user_collection.find({}, {"username": 1,"first_name": 1, "role": 1, "last_interaction": 1})
         return list(users_cursor)
     
     def find_users_by_role(self, role: str):

@@ -15,6 +15,7 @@ config_env = dotenv.dotenv_values(config_dir / "config.env")
 telegram_token = config_yaml["telegram_token"]
 openai_api_key = config_yaml["openai_api_key"]
 developer_username =  config_yaml["developer_username"]
+timezone = config_yaml["database_timezone"]
 stripe_secret_key = config_yaml["stripe_secret_key"]
 stripe_webhook_secret = config_yaml.get("stripe_webhook_secret", None)  
 openai_api_base = config_yaml.get("openai_api_base", None)
