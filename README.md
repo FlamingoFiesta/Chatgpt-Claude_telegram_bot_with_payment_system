@@ -18,6 +18,8 @@ This repo is ChatGPT re-created as Telegram Bot, and its 95% ready for you to de
 
 You can deploy your own bot, or use mine: [@Chatdud Bot](https://t.me/ChatdudBot)
 
+If you decide to clone the repo and use the bot, please consider starring the project. I would be really greatful! <3
+
 ## Original features when I started the fork (02.02.2024)
 - Low latency replies (it usually takes about 3-5 seconds)
 - No request limits
