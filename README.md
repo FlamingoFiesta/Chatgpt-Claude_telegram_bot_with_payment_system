@@ -38,7 +38,7 @@ If you decide to clone the repo and use the bot, please consider starring the pr
 - <b>GPT-4o (omni)</b> support, faster and cheaper than GPT-4 turbo, with october 2023 knowledge cut-off date.
   - It was released two days ago (13.05.2024), so right now its only used as the text model, further testing will be required until I decide to make it the default vision model. 
 
-- <b>Claude 3</b> models from Anthropic are now supported, namely: Opus, Sonnet and Haiku.
+- <b>Claude 3</b> models from <b>Anthropic</b> are now supported, namely: <b>Opus</b>, <b>Sonnet</b> and <b>Haiku</b>.
   
 - <b>15 new chat modes</b>: Cyber Dud (⌐■_■), ⌨️ Stenographer (Speech to text),  💻🟧 Grimoire (Advanced coding assitant), 🖥️ Bash dud (Linux Terminal), 🦆 Duck Mode, and a bunch of characters from movies and shows!
 
