@@ -1,5 +1,6 @@
 telegram_token: ""
 openai_api_key: ""
+claude_api_key: ""
 stripe_secret_key: "" 
 stripe_webhook_secret: "" # to recieve the payment updates
 openai_api_base: null  # leave null to use default api base or you can put your own base url here

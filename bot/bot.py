@@ -183,7 +183,7 @@ async def start_handle(update: Update, context: CallbackContext):
     developer_info = ' '.join(developer) if isinstance(developer, list) else developer
 
     reply_text = "👋 Heyoo! I'm <b>Chatdud</b>, your friendly neighborhood chatbot. Nice to meet ya! \n\n"
-    reply_text += "     I'm a telegram bot 🤖 powered by <b>ChatGPT</b>, and I'm here to help with any questions you might have. \n\n"
+    reply_text += "     I'm a telegram bot 🤖 powered by <b>ChatGPT</b> and maybe <b>Claude</b>, and I'm here to help with any questions you might have. \n\n"
     reply_text += "You might ask yourself:\n  <i><b>Why use this bot when I can just use ChatGPT in my browser?</b></i> 🤔\n\n"
     reply_text += "  Well, I use a <b>top-up</b> balance system, meaning you can pay as you go. Don't worry about no monthly $20 subscription!\n\n"
     reply_text += "Also, there is <b>no message limit</b> per hour. As long as you have at least <b>€1.25</b> to feed me, we can chat <b>as much as you want!</b>\n Ain’t that cool?? 😎\n\n"
@@ -481,7 +481,7 @@ async def _vision_message_handle_fn(
         return
 
 async def unsupport_message_handle(update: Update, context: CallbackContext, message=None):
-    
+
     if not await is_bot_mentioned(update, context):
         return
 
@@ -1431,7 +1431,12 @@ async def new_dialog_handle(update: Update, context: CallbackContext):
 
     user_id = update.message.from_user.id
     db.set_user_attribute(user_id, "last_interaction", datetime.now())
-    db.set_user_attribute(user_id, "current_model", "gpt-4-turbo-2024-04-09")
+
+    current_model = db.get_user_attribute(user_id, "current_model")
+    if current_model == "gpt-4-vision-preview":
+        db.set_user_attribute(user_id, "current_model", "gpt-4-turbo-2024-04-09")
+
+    #db.set_user_attribute(user_id, "current_model", "gpt-4-turbo-2024-04-09")
 
     db.start_new_dialog(user_id)
     await update.message.reply_text("Starting new dialog ✅")
@@ -1584,24 +1589,34 @@ async def display_model_info(query, user_id, context):
     details_text += "\nSelect <b>model</b>:"
     
     buttons = []
+    claude_buttons = []
+    other_buttons = []
+
     for model_key in config.models["available_text_models"]:
         title = config.models["info"][model_key]["name"]
         if model_key == current_model:
             title = "✅ " + title
-        buttons.append(InlineKeyboardButton(title, callback_data=f"model-set_settings|{model_key}"))
+        
+        # Adjust callback data to include a prefix for Claude models
+        if "claude" in model_key.lower():
+            callback_data = f"claude-model-set_settings|{model_key}"
+            claude_buttons.append(InlineKeyboardButton(title, callback_data=callback_data))
+        else:
+            callback_data = f"model-set_settings|{model_key}"
+            other_buttons.append(InlineKeyboardButton(title, callback_data=callback_data))
     
-    half_size = len(buttons) // 2
-    first_row = buttons[:half_size]
-    second_row = buttons[half_size:]
+    half_size = len(other_buttons) // 2
+    first_row = other_buttons[:half_size]
+    second_row = other_buttons[half_size:]
     back_button = [InlineKeyboardButton("⬅️", callback_data='model-back_to_settings')]
-    reply_markup = InlineKeyboardMarkup([first_row, second_row, back_button])
+    
+    reply_markup = InlineKeyboardMarkup([first_row, second_row, claude_buttons, back_button])
     
     try:
         await query.edit_message_text(text=details_text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
     except telegram.error.BadRequest as e:
         if "Message is not modified" in str(e):
             pass
-
 #for the settings menu
 async def model_settings_handler(update: Update, context: CallbackContext):
     query = update.callback_query
@@ -1611,7 +1626,6 @@ async def model_settings_handler(update: Update, context: CallbackContext):
     user_id = query.from_user.id
 
     if data == 'model-ai_model':
-        # Display the current AI Model details
         current_model = db.get_user_attribute(user_id, "current_model")
         text = f"{config.models['info'][current_model]['description']}\n\n"
 
@@ -1620,25 +1634,59 @@ async def model_settings_handler(update: Update, context: CallbackContext):
             text += f"{'🟢' * score_value}{'⚪️' * (5 - score_value)} – {score_key}\n"
 
         text += "\nSelect <b>model</b>:\n"
+        
         buttons = []
+        claude_buttons = []
+        other_buttons = []
+
         for model_key in config.models["available_text_models"]:
             title = config.models["info"][model_key]["name"]
             if model_key == current_model:
                 title = "✅ " + title
-            buttons.append(InlineKeyboardButton(title, callback_data=f"model-set_settings|{model_key}"))
+            
+            # Adjust callback data to include a prefix for Claude models
+            if "claude" in model_key.lower():
+                callback_data = f"claude-model-set_settings|{model_key}"
+                claude_buttons.append(InlineKeyboardButton(title, callback_data=callback_data))
+            else:
+                callback_data = f"model-set_settings|{model_key}"
+                other_buttons.append(InlineKeyboardButton(title, callback_data=callback_data))
 
-        half_size = len(buttons) // 2
-        first_row = buttons[:half_size]
-        second_row = buttons[half_size:]
+        half_size = len(other_buttons) // 2
+        first_row = other_buttons[:half_size]
+        second_row = other_buttons[half_size:]
         back_button = [InlineKeyboardButton("⬅️", callback_data='model-back_to_settings')]
-        reply_markup = InlineKeyboardMarkup([first_row, second_row, back_button])
+        
+        reply_markup = InlineKeyboardMarkup([first_row, second_row, claude_buttons, back_button])
 
         await query.edit_message_text(text=text, parse_mode=ParseMode.HTML, reply_markup=reply_markup)
 
-    elif data.startswith('model-set_settings|'):
+    elif data.startswith('claude-model-set_settings|'):
+        # Check for API key
+        if config.claude_api_key is None or config.claude_api_key == "":
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="This bot does not have the Anthropic models available :(",
+                parse_mode='Markdown'
+            )
+            return
+        # Continue handling setting the model as usual
         _, model_key = data.split("|")
         db.set_user_attribute(user_id, "current_model", model_key)
-        await display_model_info(query, user_id, context)  # keep the existing reply_markup       
+        await display_model_info(query, user_id, context)
+
+    elif data.startswith('model-set_settings|'):
+        _, model_key = data.split("|")
+        # Prevent Claude models from being set without API key
+        if "claude" in model_key.lower() and (config.claude_api_key is None or config.claude_api_key == ""):
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="This bot does not have the Anthropic models available :(",
+                parse_mode='Markdown'
+            )
+            return
+        db.set_user_attribute(user_id, "current_model", model_key)
+        await display_model_info(query, user_id, context)
 
     elif data.startswith('model-artist-set_model|'):
         _, model_key = data.split("|")
@@ -2142,6 +2190,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("settings", settings_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(set_settings_handle, pattern="^set_settings"))
     application.add_handler(CallbackQueryHandler(model_settings_handler, pattern='^model-'))
+    application.add_handler(CallbackQueryHandler(model_settings_handler, pattern='^claude-model-'))
 
     application.add_handler(CommandHandler("balance", show_balance_handle, filters=user_filter))
     application.add_handler(CallbackQueryHandler(callback_show_details, pattern='^show_details$'))
@@ -2171,8 +2220,6 @@ def run_bot() -> None:
 
 
 if __name__ == "__main__":
-    #thread = threading.Thread(target=start_asyncio_loop, daemon=True)
-    #thread.start()
-    
+
     run_bot()
 

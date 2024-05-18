@@ -1,5 +1,5 @@
 #available_text_models: ["gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4", "text-davinci-003"] #Big menu
-available_text_models: ["gpt-3.5-turbo", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"] #small menu with all needed models
+available_text_models: ["gpt-3.5-turbo", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"] #small menu with all needed models
 available_image_models: ["dalle-2", "dalle-3"]
 
 #prices per 1k tokens or per image, regularly update from openAI's pricing page to be accurate
@@ -95,6 +95,48 @@ info:
     scores:
       smart: 5
       fast: 4
+      cheap: 4
+
+  claude-3-opus-20240229: 
+
+    type: chat_completion
+    name: Claude Opus
+    description: "Claude 3 Opus is the latest model from Anthropic. It's designed to be highly intelligent and versatile, making it suitable for a wide range of applications. It offers excellent performance at a competitive price."
+    
+    price_per_1000_input_tokens: 0.015
+    price_per_1000_output_tokens: 0.075
+
+    scores:
+      smart: 5
+      fast: 3
+      cheap: 2
+
+  claude-3-sonnet-20240229:
+
+    type: chat_completion
+    name: Claude Sonnet
+    description: "Claude 3 Sonnet is optimized for creative writing and content generation. It provides smart and contextually aware outputs, making it ideal for artistic and literary tasks."
+    
+    price_per_1000_input_tokens: 0.003
+    price_per_1000_output_tokens: 0.015
+
+    scores:
+      smart: 4
+      fast: 4
+      cheap: 3
+
+  claude-3-haiku-20240307: 
+
+    type: chat_completion
+    name: Claude Haiku
+    description: "Claude 3 Haiku is designed for concise and insightful responses. It excels in tasks that require brevity and clarity, making it perfect for summarizations and quick insights."
+    
+    price_per_1000_input_tokens: 0.00025
+    price_per_1000_output_tokens: 0.00125
+
+    scores:
+      smart: 3
+      fast: 5
       cheap: 4
 
   text-davinci-003:

@@ -38,6 +38,8 @@ If you decide to clone the repo and use the bot, please consider starring the pr
 - <b>GPT-4o (omni)</b> support, faster and cheaper than GPT-4 turbo, with october 2023 knowledge cut-off date.
   - It was released two days ago (13.05.2024), so right now its only used as the text model, further testing will be required until I decide to make it the default vision model. 
 
+- <b>Claude 3</b> models from Anthropic are now supported, namely: Opus, Sonnet and Haiku.
+  
 - <b>15 new chat modes</b>: Cyber Dud (⌐■_■), ⌨️ Stenographer (Speech to text),  💻🟧 Grimoire (Advanced coding assitant), 🖥️ Bash dud (Linux Terminal), 🦆 Duck Mode, and a bunch of characters from movies and shows!
 
 - <b>Transcribe</b> voice messages (choose ⌨️ Stenographer) 
@@ -86,7 +88,7 @@ If you decide to clone the repo and use the bot, please consider starring the pr
 - `/model` - Show your current selected model
 
 ## Setup
-1. Get your [OpenAI API](https://openai.com/api/) key
+1. Get your [OpenAI API](https://openai.com/api/) key and/or your [Anthropic API](https://www.anthropic.com/api) key
 
 2. Get your Telegram bot token from [@BotFather](https://t.me/BotFather)
 

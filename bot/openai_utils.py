@@ -5,14 +5,19 @@ import logging
 
 import tiktoken
 import openai
+import anthropic
+import logging
 
 import json #logging error
 
+from tokenizers import Tokenizer, models, pre_tokenizers, trainers
 # setup openai
 openai.api_key = config.openai_api_key
 if config.openai_api_base is not None:
     openai.api_base = config.openai_api_base
 logger = logging.getLogger(__name__)
+
+anthropic.api_key = config.claude_api_key
 
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.7,
@@ -35,8 +40,14 @@ def validate_payload(payload): #maybe comment out
 
 class ChatGPT:
     def __init__(self, model="gpt-4-1106-preview"):
-        assert model in {"text-davinci-003", "gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"}, f"Unknown model: {model}"
+        assert model in {"text-davinci-003", "gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"}, f"Unknown model: {model}"
         self.model = model
+        self.is_claude_model = model.startswith("claude")
+        self.logger = logging.getLogger(__name__)
+        self.headers = {
+            "Authorization": f"Bearer {config.claude_api_key if self.is_claude_model else config.openai_api_key}",
+            "Content-Type": "application/json",
+        }
 
     async def send_message(self, message, dialog_messages=[], chat_mode="assistant"):
         if chat_mode not in config.chat_modes.keys():
@@ -46,40 +57,67 @@ class ChatGPT:
         answer = None
         while answer is None:
             try:
-                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"}:
-                    messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
-                    #GPT HELP 2
-                    validate_payload({
-                        "model": self.model,
-                        "messages": messages,
-                        **OPENAI_COMPLETION_OPTIONS
-                    })
-                    #GPT HELP 2
-                    r = await openai.ChatCompletion.acreate(
+                if self.is_claude_model:
+                    prompt = self._generate_claude_prompt(message, dialog_messages, chat_mode)
+                    self.logger.debug(f"Claude prompt: {prompt}")
+
+                    if not prompt.strip():
+                        raise ValueError("Generated prompt is empty")
+
+                    client = anthropic.AsyncAnthropic(api_key=config.claude_api_key)
+                    response = await client.completions.create(
                         model=self.model,
-                        messages=messages,
-                        **OPENAI_COMPLETION_OPTIONS
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1000,
+                        temperature=0.7
                     )
-                    answer = r.choices[0].message["content"]
-                elif self.model == "text-davinci-003":
-                    prompt = self._generate_prompt(message, dialog_messages, chat_mode)
+                    self.logger.debug(f"Claude API response: {response}")
 
-                    #GPT HELP 2
-                    validate_payload({
-                        "model": self.model,
-                        "messages": messages,
-                        **OPENAI_COMPLETION_OPTIONS
-                    })
-                    #GPT HELP 2
+                    answer = ""
+                    for text_block in response.content:
+                        self.logger.debug(f"TextBlock: {text_block}")
+                        answer += text_block.text
 
-                    r = await openai.Completion.acreate(
-                        engine=self.model,
-                        prompt=prompt,
-                        **OPENAI_COMPLETION_OPTIONS
-                    )
-                    answer = r.choices[0].text
+                    if not answer.strip():
+                        self.logger.error("Received empty response from Claude API.")
+                        raise ValueError("Received empty response from Claude API.")
+
+                    n_input_tokens, n_output_tokens = self._count_tokens_from_messages([], answer, model=self.model)
                 else:
-                    raise ValueError(f"Unknown model: {self.model}")
+                    if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"}:
+                        messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
+                        #GPT HELP 2
+                        validate_payload({
+                            "model": self.model,
+                            "messages": messages,
+                            **OPENAI_COMPLETION_OPTIONS
+                        })
+                        #GPT HELP 2
+                        r = await openai.ChatCompletion.acreate(
+                            model=self.model,
+                            messages=messages,
+                            **OPENAI_COMPLETION_OPTIONS
+                        )
+                        answer = r.choices[0].message["content"]
+                    elif self.model == "text-davinci-003":
+                        prompt = self._generate_prompt(message, dialog_messages, chat_mode)
+
+                        #GPT HELP 2
+                        validate_payload({
+                            "model": self.model,
+                            "messages": messages,
+                            **OPENAI_COMPLETION_OPTIONS
+                        })
+                        #GPT HELP 2
+
+                        r = await openai.Completion.acreate(
+                            engine=self.model,
+                            prompt=prompt,
+                            **OPENAI_COMPLETION_OPTIONS
+                        )
+                        answer = r.choices[0].text
+                    else:
+                        raise ValueError(f"Unknown model: {self.model}")
 
                 answer = self._postprocess_answer(answer)
                 n_input_tokens, n_output_tokens = r.usage.prompt_tokens, r.usage.completion_tokens
@@ -100,44 +138,75 @@ class ChatGPT:
 
         n_dialog_messages_before = len(dialog_messages)
         answer = None
+        n_input_tokens, n_output_tokens, n_first_dialog_messages_removed = 0, 0, 0
         while answer is None:
             try:
-                if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"}:
-                    messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
+                if self.is_claude_model:
+                    prompt = self._generate_claude_prompt(message, dialog_messages, chat_mode)
+
+                    if not prompt.strip():
+                        raise ValueError("Generated prompt is empty")
                     
-                    r_gen = await openai.ChatCompletion.acreate(
+                    client = anthropic.AsyncAnthropic(api_key=config.claude_api_key)
+
+                    async with client.messages.stream(
                         model=self.model,
-                        messages=messages,
-                        stream=True,
-                        **OPENAI_COMPLETION_OPTIONS
-                    )
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=1000,
+                        temperature=0.0#0.7
+                    ) as stream:
+                        async for event in stream.text_stream:
+                            #self.logger.debug(f"Event: {event}")
+                            if event:
+                                if isinstance(event, str):
+                                    if answer is None:
+                                        answer = event
+                                    else:
+                                        answer += event
+                                    n_input_tokens, n_output_tokens = self._count_tokens_from_messages([], answer, model=self.model)
+                                    yield "not_finished", answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed
+   
+                    if not answer.strip():
+                        raise ValueError("Received empty response from Claude API.")
 
-                    answer = ""
-                    async for r_item in r_gen:
-                        delta = r_item.choices[0].delta
+                else:
 
-                        if "content" in delta:
-                            answer += delta.content
-                            n_input_tokens, n_output_tokens = self._count_tokens_from_messages(messages, answer, model=self.model)
-                            n_first_dialog_messages_removed = 0  #n_dialog_messages_before - len(dialog_messages) #repo commit
+                    if self.model in {"gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-turbo-2024-04-09", "gpt-4o"}:
+                        messages = self._generate_prompt_messages(message, dialog_messages, chat_mode)
+                        
+                        r_gen = await openai.ChatCompletion.acreate(
+                            model=self.model,
+                            messages=messages,
+                            stream=True,
+                            **OPENAI_COMPLETION_OPTIONS
+                        )
 
+                        answer = ""
+                        async for r_item in r_gen:
+                            delta = r_item.choices[0].delta
+
+                            if "content" in delta:
+                                answer += delta.content
+                                n_input_tokens, n_output_tokens = self._count_tokens_from_messages(messages, answer, model=self.model)
+                                n_first_dialog_messages_removed = 0  #n_dialog_messages_before - len(dialog_messages) #repo commit
+
+                                yield "not_finished", answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed
+                                
+                    elif self.model == "text-davinci-003":
+                        prompt = self._generate_prompt(message, dialog_messages, chat_mode)
+                        r_gen = await openai.Completion.acreate(
+                            engine=self.model,
+                            prompt=prompt,
+                            stream=True,
+                            **OPENAI_COMPLETION_OPTIONS
+                        )
+
+                        answer = ""
+                        async for r_item in r_gen:
+                            answer += r_item.choices[0].text
+                            n_input_tokens, n_output_tokens = self._count_tokens_from_prompt(prompt, answer, model=self.model)
+                            n_first_dialog_messages_removed = n_dialog_messages_before - len(dialog_messages)
                             yield "not_finished", answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed
-                            
-                elif self.model == "text-davinci-003":
-                    prompt = self._generate_prompt(message, dialog_messages, chat_mode)
-                    r_gen = await openai.Completion.acreate(
-                        engine=self.model,
-                        prompt=prompt,
-                        stream=True,
-                        **OPENAI_COMPLETION_OPTIONS
-                    )
-
-                    answer = ""
-                    async for r_item in r_gen:
-                        answer += r_item.choices[0].text
-                        n_input_tokens, n_output_tokens = self._count_tokens_from_prompt(prompt, answer, model=self.model)
-                        n_first_dialog_messages_removed = n_dialog_messages_before - len(dialog_messages)
-                        yield "not_finished", answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed
 
                 answer = self._postprocess_answer(answer)
 
@@ -147,6 +216,7 @@ class ChatGPT:
 
                 # forget first message in dialog_messages
                 dialog_messages = dialog_messages[1:]
+                n_first_dialog_messages_removed = n_dialog_messages_before - len(dialog_messages)
 
         yield "finished", answer, (n_input_tokens, n_output_tokens), n_first_dialog_messages_removed  # sending final answer
 
@@ -307,12 +377,37 @@ class ChatGPT:
 
         return messages
 
+    def _generate_claude_prompt(self, message, dialog_messages, chat_mode, image_buffer: BytesIO = None):
+        prompt = config.chat_modes[chat_mode]["prompt_start"]
+        combined_prompt = prompt
+
+        for dialog_message in dialog_messages:
+            combined_prompt += f"\n\nHuman: {dialog_message['user']}\n\nAssistant: {dialog_message['bot']}"
+
+        if image_buffer is not None:
+            encoded_image = self._encode_image(image_buffer)
+            combined_prompt += f"\n\nHuman: {message}\n\nAssistant: [IMAGE: {encoded_image}]"
+        else:
+            combined_prompt += f"\n\nHuman: {message}"
+
+        combined_prompt += "\n\nAssistant:"
+        return combined_prompt
+
+
     def _postprocess_answer(self, answer):
+        self.logger.debug(f"Pre-processed answer: {answer}")
         answer = answer.strip()
+        self.logger.debug(f"Post-processed answer: {answer}")
         return answer
 
     def _count_tokens_from_messages(self, messages, answer, model="gpt-4-1106-preview"):
-        encoding = tiktoken.encoding_for_model(model)
+        if model.startswith("claude"):
+            tokenizer = self._get_claude_tokenizer()
+        else:
+            encoding = tiktoken.encoding_for_model(model)
+
+        tokens_per_message = 3
+        tokens_per_name = 1
 
         if model == "gpt-3.5-turbo-16k":
             tokens_per_message = 4  # every message follows <im_start>{role/name}\n{content}<im_end>\n
@@ -334,11 +429,19 @@ class ChatGPT:
             tokens_per_name = 1
         elif model == "gpt-4o": 
             tokens_per_message = 3
+            tokens_per_name = 1 
+        elif model == "claude-3-opus-20240229": 
+            tokens_per_message = 3
             tokens_per_name = 1
+        elif model == "claude-3-sonnet-20240229": 
+            tokens_per_message = 3
+            tokens_per_name = 1 
+        elif model == "claude-3-haiku-20240307": 
+            tokens_per_message = 3
+            tokens_per_name = 1  
         else:
             raise ValueError(f"Unknown model: {model}")
 
-        # input
         # input
         n_input_tokens = 0
         for message in messages:
@@ -347,13 +450,19 @@ class ChatGPT:
                 for sub_message in message["content"]:
                     if "type" in sub_message:
                         if sub_message["type"] == "text":
-                            n_input_tokens += len(encoding.encode(sub_message["text"]))
+                            if model.startswith("claude"):
+                                n_input_tokens += len(tokenizer.encode(sub_message["text"]).tokens)
+                            else:
+                                n_input_tokens += len(encoding.encode(sub_message["text"]))
                         elif sub_message["type"] == "image_url":
                             pass
             else:
                 if "type" in message:
                     if message["type"] == "text":
-                        n_input_tokens += len(encoding.encode(message["text"]))
+                        if model.startswith("claude"):
+                            n_input_tokens += len(tokenizer.encode(message["text"]).tokens)
+                        else:
+                            n_input_tokens += len(encoding.encode(message["text"]))
                     elif message["type"] == "image_url":
                         pass
 
@@ -361,19 +470,30 @@ class ChatGPT:
         n_input_tokens += 2
 
         # output
-        n_output_tokens = 1 + len(encoding.encode(answer))
+        if model.startswith("claude"):
+            n_output_tokens = 1 + len(tokenizer.encode(answer).tokens)
+        else:
+            n_output_tokens = 1 + len(encoding.encode(answer))
 
         return n_input_tokens, n_output_tokens
 
     def _count_tokens_from_prompt(self, prompt, answer, model="text-davinci-003"):
-        encoding = tiktoken.encoding_for_model(model)
-
-        n_input_tokens = len(encoding.encode(prompt)) + 1
-        n_output_tokens = len(encoding.encode(answer))
+        if model.startswith("claude"):
+            tokenizer = self._get_claude_tokenizer()
+            n_input_tokens = len(tokenizer.encode(prompt).tokens) + 1
+            n_output_tokens = len(tokenizer.encode(answer).tokens)
+        else:
+            encoding = tiktoken.encoding_for_model(model)
+            n_input_tokens = len(encoding.encode(prompt)) + 1
+            n_output_tokens = len(encoding.encode(answer))
 
         return n_input_tokens, n_output_tokens
 
-
+    def _get_claude_tokenizer(self):
+        tokenizer = Tokenizer(models.BPE())
+        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
+        return tokenizer
+    
 async def transcribe_audio(audio_file) -> str:
     r = await openai.Audio.atranscribe("whisper-1", audio_file)
     return r["text"] or ""

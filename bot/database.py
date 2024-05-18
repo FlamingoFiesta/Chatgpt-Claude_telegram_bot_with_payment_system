@@ -237,7 +237,6 @@ class Database:
             "total_donated": user_data.get("total_donated", 0)
         }
 
-
     def deduct_euro_balance(self, user_id: int, euro_amount: float):
         self.check_if_user_exists(user_id, raise_exception=True)
     # Ensure the deduction amount is not negative to avoid accidental balance increase
@@ -261,7 +260,7 @@ class Database:
         cost_in_euros = 0
 
         # Handle text models (per 1000 tokens)
-        if action_type in ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-1106-preview', 'gpt-4-vision-preview', 'text-davinci-003', 'gpt-4-turbo-2024-04-09', "gpt-4o"]:
+        if action_type in ['gpt-3.5-turbo', 'gpt-3.5-turbo-16k', 'gpt-4', 'gpt-4-1106-preview', 'gpt-4-vision-preview', 'text-davinci-003', 'gpt-4-turbo-2024-04-09', "gpt-4o", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]:
 
             # Retrieve the input/output pricing from `config.models`
             price_per_1000_input = model_info.get('price_per_1000_input_tokens', 0)
