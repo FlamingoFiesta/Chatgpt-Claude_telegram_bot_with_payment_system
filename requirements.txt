@@ -1,6 +1,6 @@
 python-telegram-bot[rate-limiter]==20.1
 openai==0.28.1 #chatgpt library
-tiktoken>=0.3.0 #tokenizer for openai
+tiktoken>=0.3.0 #tokenizer 
 PyYAML==6.0 #configs 
 pymongo==4.3.3 #database
 python-dotenv==0.21.0 #.env files
@@ -11,4 +11,4 @@ redis>=4.0.2 #payment recieve notif
 aioredis>=2.0.0 #payment recieve notif
 pytz==2023.3 #timezone management
 anthropic #claude library
-tokenizers #tokenizer for anthropic
+#tokenizers #other tokenizer if you want to also use the one in the utils file

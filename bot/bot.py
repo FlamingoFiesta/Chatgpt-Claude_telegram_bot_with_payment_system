@@ -44,12 +44,13 @@ import pytz
 
 # setup
 db = database.Database()
+
 logger = logging.getLogger(__name__)
 
 user_semaphores = {}
 user_tasks = {}
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s') #logging error
+
 HELP_MESSAGE = """Commands:
 
 ⚪ /new – Start new dialog 
@@ -92,11 +93,19 @@ def update_user_roles_from_config(db, roles):
             )
     print("User roles updated from config.")
 
-
 def split_text_into_chunks(text, chunk_size):
     for i in range(0, len(text), chunk_size):
         yield text[i:i + chunk_size]
 
+def configure_logging():
+    # Configure logging based on the enable_detailed_logging value
+    if config.enable_detailed_logging:
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+    else:
+        logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+
+    # Set the logger level based on configuration
+    logger.setLevel(logging.getLogger().level)
 
 async def register_user_if_not_exists(update: Update, context: CallbackContext, user: User):
     user_registered_now = False
@@ -1663,7 +1672,7 @@ async def model_settings_handler(update: Update, context: CallbackContext):
 
     elif data.startswith('claude-model-set_settings|'):
         # Check for API key
-        if config.claude_api_key is None or config.claude_api_key == "":
+        if config.anthropic_api_key is None or config.anthropic_api_key == "":
             await context.bot.send_message(
                 chat_id=user_id,
                 text="This bot does not have the Anthropic models available :(",
@@ -1678,7 +1687,7 @@ async def model_settings_handler(update: Update, context: CallbackContext):
     elif data.startswith('model-set_settings|'):
         _, model_key = data.split("|")
         # Prevent Claude models from being set without API key
-        if "claude" in model_key.lower() and (config.claude_api_key is None or config.claude_api_key == ""):
+        if "claude" in model_key.lower() and (config.anthropic_api_key is None or config.anthropic_api_key == ""):
             await context.bot.send_message(
                 chat_id=user_id,
                 text="This bot does not have the Anthropic models available :(",
@@ -2148,6 +2157,7 @@ def run_bot() -> None:
     bot_instance = application.bot
 
     update_user_roles_from_config(db, config.roles)
+    configure_logging()
 
     application = (
         ApplicationBuilder()

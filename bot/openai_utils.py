@@ -10,14 +10,14 @@ import logging
 
 import json #logging error
 
-from tokenizers import Tokenizer, models, pre_tokenizers, trainers
+#from tokenizers import Tokenizer, models, pre_tokenizers, trainers # other tokenizer module
+
 # setup openai
 openai.api_key = config.openai_api_key
+anthropic.api_key = config.anthropic_api_key
+
 if config.openai_api_base is not None:
     openai.api_base = config.openai_api_base
-logger = logging.getLogger(__name__)
-
-anthropic.api_key = config.claude_api_key
 
 OPENAI_COMPLETION_OPTIONS = {
     "temperature": 0.7,
@@ -28,16 +28,28 @@ OPENAI_COMPLETION_OPTIONS = {
     "request_timeout": 60.0,
 }
 
-#GPT HELP 2
+logger = logging.getLogger(__name__)
+
+def configure_logging():
+    # Configure logging based on the enable_detailed_logging value
+    if config.enable_detailed_logging:
+        logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+    else:
+        logging.basicConfig(level=logging.CRITICAL, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+
+    # Set the logger level based on configuration
+    logger.setLevel(logging.getLogger().level)
+
+configure_logging()
+
 def validate_payload(payload): #maybe comment out
     # Example validation: Ensure all messages have content that is a string
     for message in payload.get("messages", []):
         if not isinstance(message.get("content"), str):
             logger.error("Invalid message content: Not a string")
             raise ValueError("Message content must be a string")
-#GPT HELP 2
-        
 
+        
 class ChatGPT:
     def __init__(self, model="gpt-4-1106-preview"):
         assert model in {"text-davinci-003", "gpt-3.5-turbo-16k", "gpt-3.5-turbo", "gpt-4", "gpt-4-1106-preview", "gpt-4-vision-preview", "gpt-4-turbo-2024-04-09", "gpt-4o", "claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"}, f"Unknown model: {model}"
@@ -45,7 +57,7 @@ class ChatGPT:
         self.is_claude_model = model.startswith("claude")
         self.logger = logging.getLogger(__name__)
         self.headers = {
-            "Authorization": f"Bearer {config.claude_api_key if self.is_claude_model else config.openai_api_key}",
+            "Authorization": f"Bearer {config.anthropic_api_key if self.is_claude_model else config.openai_api_key}",
             "Content-Type": "application/json",
         }
 
@@ -64,7 +76,7 @@ class ChatGPT:
                     if not prompt.strip():
                         raise ValueError("Generated prompt is empty")
 
-                    client = anthropic.AsyncAnthropic(api_key=config.claude_api_key)
+                    client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
                     response = await client.completions.create(
                         model=self.model,
                         messages=[{"role": "user", "content": prompt}],
@@ -147,7 +159,7 @@ class ChatGPT:
                     if not prompt.strip():
                         raise ValueError("Generated prompt is empty")
                     
-                    client = anthropic.AsyncAnthropic(api_key=config.claude_api_key)
+                    client = anthropic.AsyncAnthropic(api_key=config.anthropic_api_key)
 
                     async with client.messages.stream(
                         model=self.model,
@@ -393,7 +405,6 @@ class ChatGPT:
         combined_prompt += "\n\nAssistant:"
         return combined_prompt
 
-
     def _postprocess_answer(self, answer):
         self.logger.debug(f"Pre-processed answer: {answer}")
         answer = answer.strip()
@@ -401,44 +412,24 @@ class ChatGPT:
         return answer
 
     def _count_tokens_from_messages(self, messages, answer, model="gpt-4-1106-preview"):
+
         if model.startswith("claude"):
-            tokenizer = self._get_claude_tokenizer()
+            encoding = tiktoken.encoding_for_model("gpt-4-turbo-2024-04-09")
         else:
             encoding = tiktoken.encoding_for_model(model)
 
         tokens_per_message = 3
         tokens_per_name = 1
 
-        if model == "gpt-3.5-turbo-16k":
-            tokens_per_message = 4  # every message follows <im_start>{role/name}\n{content}<im_end>\n
-            tokens_per_name = -1  # if there's a name, the role is omitted
-        elif model == "gpt-3.5-turbo":
-            tokens_per_message = 4
-            tokens_per_name = -1
-        elif model == "gpt-4":
-            tokens_per_message = 3
-            tokens_per_name = 1
-        elif model == "gpt-4-1106-preview":
-            tokens_per_message = 3
-            tokens_per_name = 1
-        elif model == "gpt-4-vision-preview":
+        if model.startswith("gpt-3"):
+            tokens_per_message = 4 # every message follows <im_start>{role/name}\n{content}<im_end>\n
+            tokens_per_name = -1 # if there's a name, the role is omitted
+        elif model.startswith("gpt-4"):
             tokens_per_message = 3
             tokens_per_name = 1 
-        elif model == "gpt-4-turbo-2024-04-09": 
-            tokens_per_message = 3
-            tokens_per_name = 1
-        elif model == "gpt-4o": 
+        elif model.startswith("claude"):
             tokens_per_message = 3
             tokens_per_name = 1 
-        elif model == "claude-3-opus-20240229": 
-            tokens_per_message = 3
-            tokens_per_name = 1
-        elif model == "claude-3-sonnet-20240229": 
-            tokens_per_message = 3
-            tokens_per_name = 1 
-        elif model == "claude-3-haiku-20240307": 
-            tokens_per_message = 3
-            tokens_per_name = 1  
         else:
             raise ValueError(f"Unknown model: {model}")
 
@@ -450,49 +441,33 @@ class ChatGPT:
                 for sub_message in message["content"]:
                     if "type" in sub_message:
                         if sub_message["type"] == "text":
-                            if model.startswith("claude"):
-                                n_input_tokens += len(tokenizer.encode(sub_message["text"]).tokens)
-                            else:
-                                n_input_tokens += len(encoding.encode(sub_message["text"]))
+                            n_input_tokens += len(encoding.encode(sub_message["text"]))
                         elif sub_message["type"] == "image_url":
                             pass
             else:
                 if "type" in message:
                     if message["type"] == "text":
-                        if model.startswith("claude"):
-                            n_input_tokens += len(tokenizer.encode(message["text"]).tokens)
-                        else:
-                            n_input_tokens += len(encoding.encode(message["text"]))
+                        n_input_tokens += len(encoding.encode(message["text"]))
                     elif message["type"] == "image_url":
                         pass
-
 
         n_input_tokens += 2
 
         # output
-        if model.startswith("claude"):
-            n_output_tokens = 1 + len(tokenizer.encode(answer).tokens)
-        else:
-            n_output_tokens = 1 + len(encoding.encode(answer))
+        n_output_tokens = 1 + len(encoding.encode(answer))
 
         return n_input_tokens, n_output_tokens
 
     def _count_tokens_from_prompt(self, prompt, answer, model="text-davinci-003"):
         if model.startswith("claude"):
-            tokenizer = self._get_claude_tokenizer()
-            n_input_tokens = len(tokenizer.encode(prompt).tokens) + 1
-            n_output_tokens = len(tokenizer.encode(answer).tokens)
+            encoding = tiktoken.encoding_for_model("gpt-4-turbo-2024-04-09")
         else:
             encoding = tiktoken.encoding_for_model(model)
-            n_input_tokens = len(encoding.encode(prompt)) + 1
-            n_output_tokens = len(encoding.encode(answer))
+
+        n_input_tokens = len(encoding.encode(prompt)) + 1
+        n_output_tokens = len(encoding.encode(answer))
 
         return n_input_tokens, n_output_tokens
-
-    def _get_claude_tokenizer(self):
-        tokenizer = Tokenizer(models.BPE())
-        tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel()
-        return tokenizer
     
 async def transcribe_audio(audio_file) -> str:
     r = await openai.Audio.atranscribe("whisper-1", audio_file)
@@ -501,6 +476,7 @@ async def transcribe_audio(audio_file) -> str:
 
 async def generate_images(prompt, model="dall-e-2", n_images=4, size="1024x1024", quality="standard"):
     """Generate images using OpenAI's specified model, including DALL-E 3."""
+    #redundancy to make sure the api call isnt made wrong
     if model=="dalle-2":
         model="dall-e-2"
         quality="standard"
