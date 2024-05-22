@@ -44,7 +44,7 @@ If you decide to clone the repo and use the bot, please consider starring the pr
 
 - <b>Transcribe</b> voice messages (choose ⌨️ Stenographer) 
 
-- <b>Selectable</b> DALL-E models and their configurations. You can choose between DALL-E 2 which allows you to generate multiple images at once and DALL-E 3 which allows you to choose the image quality. You can choose the image resolution for both models in /settings "Artist model"
+- <b>Selectable</b> DALL-E models and their configurations. You can choose between DALL-E 2 which allows you to generate multiple images at once and DALL-E 3 which allows you to choose the image quality. You can choose the image resolution for both models in `/settings` Artist model
 
 - <b>Improved</b> start and help messages
 
@@ -62,7 +62,7 @@ If you decide to clone the repo and use the bot, please consider starring the pr
     - In the form of "1.xx", xx being the percentage of profit you want
        - 1.10 for 10%, 1.05 for 5% etc.
 
-- Check user balance before making the API call and prompt them to top-up if it's too low. Can be turned off by changing the persona deduction rates to 0
+- Check user balance before making the API call and prompt them to top-up if it's too low. Can be turned off by changing the role deduction rates to 0
 
 - Tracking the balance in euros and tokens. The default is in euros, advanced users and switch to the token system, the functions are there.
 
@@ -86,16 +86,17 @@ If you decide to clone the repo and use the bot, please consider starring the pr
 - `/help` – Show the commands
 - `/role` – Show your role
 - `/model` - Show your current selected model
+- `/admin` - Display admin commands (if youre admin)
 
 ## Setup
-1. Get your [OpenAI API](https://openai.com/api/) key and/or your [Anthropic API](https://www.anthropic.com/api) key
+1. Get your [OpenAI API](https://openai.com/api/) key and/or your (optional) [Anthropic API](https://www.anthropic.com/api) key 
 
 2. Get your Telegram bot token from [@BotFather](https://t.me/BotFather)
 
 3. Get your Stripe [secret key](https://dashboard.stripe.com/apikeys) (optional if you dont want to use the payment system)
 
 4. Edit `config/config.example.yml` to set your tokens, stripe key (if you choose to use stripe), then run the 2 commands below (*if you're advanced user, you can also edit* `config/config.example.env`):
-    ```bash
+    ```terminal
     mv config/config.example.yml config/config.yml
     mv config/config.example.env config/config.env
     ```
@@ -125,7 +126,7 @@ If you decide to clone the repo and use the bot, please consider starring the pr
           - Open Command Prompt.
           - Open terminal and navigate to the folder where you unziped ngrok (e.g. ```cd Downloads```).
           - Run: 
-              ```bash
+              ```powershell
               ngrok.exe authtoken <YOUR_AUTH_TOKEN> 
              ```
               
@@ -142,7 +143,7 @@ If you decide to clone the repo and use the bot, please consider starring the pr
             
         - For Windows
           - Run: 
-             ```bash
+             ```powershell
               ngrok.exe http 5000
             ```  
           - You will see a status screen with the URL next to "Forwarding" in the format of "https://NUMBERS.ngrok-free.app", you will need it in bit
@@ -163,11 +164,11 @@ If you decide to clone the repo and use the bot, please consider starring the pr
        
     8. Now youre done setting up the payment system, good job! 
           
-7. 🔥 And now, cd to the ```Chatgpt_telegram_bot_karfly-fork``` directory
+7. 🔥 And now, cd to the ```Chatgpt-Claude_telegram_bot_with_payment_system``` directory
    
    - If you use the payment system, **run**:
      
-    ```bash
+    ```terminal
     docker-compose --env-file config/config.env up --build
     ```
     
@@ -187,6 +188,9 @@ Send me a message so that I know it was you who donated, you can be on this list
 
 ## Contributors
 - [Karfly](https://github.com/father-bot/chatgpt_telegram_bot) for the foundation of the code
-- FlamingoFiesta
+- FlamingoFiesta - Main contributor to this repo
 
-
+## References
+1. [*OpenAI API documentation*](https://platform.openai.com/docs/api-reference)
+2. [*Anthropic API documentation*](https://docs.anthropic.com/en/docs/intro-to-claude)
+3. [*Stripe documentation*](https://docs.stripe.com/)

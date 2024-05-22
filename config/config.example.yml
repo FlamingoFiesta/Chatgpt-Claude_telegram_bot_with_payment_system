@@ -12,7 +12,7 @@ image_size: "1024x1024" #Can be configured within the bot menu, its initialized 
 enable_message_streaming: true  # if set, messages will be shown to user word-by-word
 enable_detailed_logging: true # if set to true, youll get constant logs of what is happening in the bot
 developer_username: [""] #will be included in certain errors given to users so they can contact the developer easier
-database_timezone: "" #so that the user_roles command give you accurate time of when the users last used the bot
+database_timezone: "" #so that the user_roles command give you accurate time of when the users last used the bot/ default is utc
 
 # prices
 chatgpt_price_per_1000_tokens: 0.002
